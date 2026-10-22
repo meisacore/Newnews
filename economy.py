@@ -368,6 +368,10 @@ class Market:
         now = int(time.time()) if now is None else int(now)
         with self.transaction() as db:
             self._launch_due(db, rng, now)
+            db.execute(
+                "INSERT INTO meta VALUES('last_tick_at', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (str(now),),
+            )
             tick = (
                 int(db.execute("SELECT value FROM meta WHERE key='tick'").fetchone()[0])
                 + 1
@@ -526,7 +530,16 @@ class Market:
                     "SELECT id,cash,strategy,risk,patience FROM accounts WHERE kind='agent'"
                 )
             ]
+            heartbeat = db.execute(
+                "SELECT value FROM meta WHERE key='last_tick_at'"
+            ).fetchone()
+            last_tick = int(heartbeat[0]) if heartbeat else None
             return {
+                "api_version": 2,
+                "simulation": {
+                    "running": last_tick is not None and 0 <= now - last_tick <= 10,
+                    "last_tick_at": last_tick,
+                },
                 "coins": coins,
                 "trades": trades,
                 "agents": agents,

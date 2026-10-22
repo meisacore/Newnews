@@ -1,6 +1,6 @@
 """Exercise welcome, Pulse, real timed launches, charts, and saved USD trades.
 
-Run against Vite and an API with NORX_DEV_AUTH=1 plus a running worker.
+Run against Vite and an API with NORX_DEV_AUTH=1 which starts the simulation automatically.
 Requires Playwright. Set BROWSER_EXECUTABLE to use a system Chromium binary.
 """
 

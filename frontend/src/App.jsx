@@ -6,6 +6,7 @@ import {
 } from "lightweight-charts";
 import "./style.css";
 import Pulse from "./Pulse";
+import { validateMarketState } from "./marketState";
 
 const dollars = (n) =>
   new Intl.NumberFormat("en-US", {
@@ -22,7 +23,14 @@ async function api(path, token, body) {
     },
     ...(body ? { method: "POST", body: JSON.stringify(body) } : {}),
   });
-  const data = await r.json();
+  let data;
+  try {
+    data = await r.json();
+  } catch {
+    throw Error(
+      "Cannot reach the market API. Start the updated backend on port 8000.",
+    );
+  }
   if (!r.ok)
     throw Error(
       typeof data.detail === "string" ? data.detail : "Request failed",
@@ -120,6 +128,7 @@ function readRoute() {
 export function App({ auth }) {
   const [route, setRoute] = useState(readRoute),
     [state, setState] = useState(null),
+    [feedError, setFeedError] = useState(""),
     [me, setMe] = useState(null),
     [selected, setSelected] = useState(() => readRoute().coin || "frog"),
     [interval, setIntervalValue] = useState(60),
@@ -132,14 +141,17 @@ export function App({ auth }) {
     [refresh, setRefresh] = useState(0);
   const session = useRef(0);
   async function load() {
-    const data = await api("state?selected=" + encodeURIComponent(selected));
+    const data = validateMarketState(
+      await api("state?selected=" + encodeURIComponent(selected)),
+    );
+    setFeedError("");
     setState({ ...data, receivedAt: Date.now() });
     setRefresh((v) => v + 1);
   }
   useEffect(() => {
-    load().catch((e) => setError(e.message));
+    load().catch((e) => setFeedError(e.message));
     const timer = setInterval(
-      () => load().catch((e) => setError(e.message)),
+      () => load().catch((e) => setFeedError(e.message)),
       3000,
     );
     return () => clearInterval(timer);
@@ -292,6 +304,11 @@ export function App({ auth }) {
           </div>
         </section>
       )}
+      {feedError && (
+        <div role="alert" className="error banner">
+          Market feed unavailable: {feedError}
+        </div>
+      )}
       {error && (
         <div role="alert" className="error banner">
           {error}
@@ -303,7 +320,13 @@ export function App({ auth }) {
         </div>
       )}
       {route.view === "pulse" && (
-        <Pulse state={state} busy={busy} onOpen={openCoin} onBuy={prepareBuy} />
+        <Pulse
+          state={state}
+          feedError={feedError}
+          busy={busy}
+          onOpen={openCoin}
+          onBuy={prepareBuy}
+        />
       )}
       {route.view === "coin" && (
         <a className="back-to-pulse" href="#pulse">

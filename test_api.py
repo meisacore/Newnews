@@ -29,6 +29,7 @@ class ApiTests(unittest.TestCase):
             {
                 "NORX_DB": self.tmp.name + "/api.sqlite3",
                 "NORX_DEV_AUTH": "0",
+                "NORX_AUTO_WORKER": "1",
                 "PRIVY_APP_ID": "test-app",
                 "PRIVY_VERIFICATION_KEY": public,
             },
@@ -75,6 +76,27 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(
             self.client.get("/api/me", headers=self.token()).json()["cash"], 10000
         )
+
+    def test_backend_starts_simulation_and_launches_without_standalone_worker(self):
+        with self.server.market.transaction() as db:
+            db.execute("UPDATE meta SET value='0' WHERE key='next_launch_at'")
+        with TestClient(self.server.app) as client:
+            deadline = time.monotonic() + 5
+            while True:
+                state = client.get("/api/state").json()
+                if state["simulation"]["running"] and state["total_coins"] == 8:
+                    break
+                if time.monotonic() > deadline:
+                    self.fail(
+                        "Backend did not start the simulation and launch a due batch"
+                    )
+                time.sleep(0.02)
+            self.assertEqual(state["api_version"], 2)
+            self.assertEqual(state["total_coins"], 8)
+        from worker import worker_lock
+
+        with worker_lock(self.server.market.path):
+            pass  # API shutdown released ownership.
 
     def test_trade_flow_and_account_separation(self):
         h = self.token()

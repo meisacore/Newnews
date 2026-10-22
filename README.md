@@ -18,17 +18,30 @@ npm ci --cache /tmp/norx-npm-cache
 npm run build
 ```
 
-Run these in separate terminals from the repository root:
+Start the backend from the repository root:
 
 ```sh
-.venv/bin/python worker.py
 .venv/bin/uvicorn server:app --host 127.0.0.1 --port 8000
 ```
 
+The backend **starts the simulation automatically**. A separate worker terminal is
+no longer required. For Windows local test mode use PowerShell:
+
+```powershell
+$env:NORX_DEV_AUTH="1"
+.\.venv\Scripts\python -m uvicorn server:app --host 127.0.0.1 --port 8000
+```
+
+Then run `npm run dev` in `frontend` in a second terminal. Keep the frontend app ID
+unset to use the local test account.
+
 The API serves the starry welcome page at `/` and the trading application at `/market.html#pulse`. ENTER WORLD transitions between them. Both pages are built by Vite; the welcome page loads without React or Privy. For frontend development instead,
 run `npm run dev` inside `frontend`; Vite proxies `/api` to port 8000.
-The worker must run separately: API instances never start extra agent loops.
-A local file lock prevents two workers using the same SQLite database.
+A cross-platform file lock allows only one simulation owner per database, including
+when several API processes or a standalone worker are running. A waiting API takes
+over if the owner exits. To run a dedicated worker instead, set `NORX_AUTO_WORKER=0`
+on the API and run `.venv/bin/python worker.py` separately. Relative `NORX_DB` paths
+resolve from the project root for both processes, regardless of terminal directory.
 
 ### Privy setup
 
@@ -58,7 +71,7 @@ to loopback by default.
 This version uses **SQLite**, not PostgreSQL. It is a runnable single-host MVP.
 `NORX_DB` defaults to `data/norx.sqlite3`; preserve that directory on persistent
 storage. Restarting processes preserves balances, agent state, trades, and pools.
-No automatic market reset or hidden cash refill occurs. Starting USD is granted
+No automatic market reset or hidden cash refill occurs. API responses include a successful-tick heartbeat; Pulse distinguishes a running simulation, a paused simulation, and a missing/outdated backend. Starting USD is granted
 exactly once per verified Privy user ID. Different Privy identities represent
 separate game accounts; Sybil resistance is not included.
 
@@ -126,7 +139,7 @@ Tests cover account separation, signed-token rejection, one-time grants under
 concurrency, dollar budgets, quote ownership/expiry/slippage, replay protection,
 restart persistence, candle gaps, market-cap calculations, conservation across
 300 simulation ticks, timed launch boundaries, duplicate prevention, migration of
-existing databases, lifecycle stages, and trading newly launched coins. The browser smoke test is in `scripts/smoke_browser.py` (requires Playwright and Chromium; run against local test mode with Vite and the worker running). It checks the original welcome transition, Pulse, USD buy/sell, reload recovery, mobile layout, and an actual timed five-coin launch. It takes about a minute. Set `BROWSER_EXECUTABLE` for a system Chromium binary, or install Playwright Chromium with `python -m playwright install chromium`. The uploaded engine and its original tests are preserved as
+existing databases, lifecycle stages, and trading newly launched coins. The browser smoke test is in `scripts/smoke_browser.py` (requires Playwright and Chromium; run against local test mode with Vite and the backend running). It checks the original welcome transition, Pulse, USD buy/sell, reload recovery, mobile layout, and an actual timed five-coin launch. It takes about a minute. Set `BROWSER_EXECUTABLE` for a system Chromium binary, or install Playwright Chromium with `python -m playwright install chromium`. The uploaded engine and its original tests are preserved as
 `market.py`, `agents.py`, `test_market.py`, and `test_agents.py` for reference; the new
 application runs `economy.py`. The old launch/graduation engine is not wired into
 this MVP.
@@ -136,7 +149,7 @@ this MVP.
 Stop the frontend, backend, and worker before updating source files. Preserve
 `data/`, any `.env` files, and `frontend/.env.local`; do not replace them with
 files from a fresh download. Install requirements, run `npm ci` in `frontend`,
-and restart the three processes. Database migrations are additive and preserve
+and restart the backend and frontend. The backend starts the simulation automatically; close any old standalone worker so outdated code does not retain the simulation lock. Database migrations are additive and preserve
 accounts, holdings, pools, and trade history. The first new launch arrives about
 one minute after the updated worker starts (or immediately if a saved batch is due).
 
@@ -144,3 +157,14 @@ The sky photo in `frontend/public/sky-bg.jpg` is the optimized image supplied wi
 the uploaded NORX design. Its welcome-page star animation and entry transition
 are preserved. Privy loads only when an app ID is configured; local test mode
 does not load the Privy SDK.
+
+### If Pulse shows zero coins or no launches
+
+Stop all old backend and worker terminals before updating. Update the entire source
+folder, not just the frontend; keep `data/` and local environment files. Start the
+updated backend and Vite. The API should immediately return the three starter coins
+(or the existing saved world), and the first scheduled five-coin batch follows
+within a minute. The frontend rejects an outdated API response with a clear restart
+message instead of silently interpreting missing stage metadata as zero coins.
+`GET /api/state` reports `api_version: 2`, `simulation.running`, `last_tick_at`,
+`total_coins`, and `next_launch_at`. No database deletion is needed.

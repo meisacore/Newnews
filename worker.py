@@ -1,39 +1,69 @@
-"""Run one simulation writer per database on Windows, macOS, or Linux."""
+"""One cross-platform simulation owner, standalone or managed by the API."""
 
 import logging
-import os
-import time
+import threading
 from pathlib import Path
 
 from filelock import FileLock, Timeout
 
 from economy import Market
+from paths import database_path
 
 
 def worker_lock(path):
-    """Use an OS-backed lock; process exit also releases ownership."""
     database = Path(path).resolve()
     database.parent.mkdir(parents=True, exist_ok=True)
     return FileLock(str(database) + ".worker.lock", timeout=0)
 
 
-def run(path):
-    with worker_lock(path):
-        market = Market(path)
-        logging.info("NORX simulation running; virtual USD only")
-        while True:
+class SimulationRunner:
+    def __init__(self, path, interval=2):
+        self.path = str(Path(path).resolve())
+        self.interval = interval
+        self.stopped = threading.Event()
+        self.thread = None
+
+    def run_forever(self):
+        while not self.stopped.is_set():
             try:
-                market.tick()
+                with worker_lock(self.path):
+                    market = Market(self.path)
+                    logging.info("NORX simulation running; virtual USD only")
+                    while not self.stopped.is_set():
+                        try:
+                            market.tick()
+                        except Exception:
+                            logging.exception("Tick rolled back; retrying next tick")
+                        self.stopped.wait(self.interval)
+            except Timeout:
+                # Another API instance or standalone worker is already advancing
+                # this database. Retry so we can take over if that owner exits.
+                self.stopped.wait(self.interval)
             except Exception:
-                logging.exception("Tick rolled back; retrying next tick")
-            time.sleep(2)
+                logging.exception("Simulation could not start; retrying")
+                self.stopped.wait(self.interval)
+
+    def start(self):
+        if self.thread and self.thread.is_alive():
+            return
+        self.thread = threading.Thread(
+            target=self.run_forever, name="norx-simulation", daemon=True
+        )
+        self.thread.start()
+
+    def stop(self):
+        self.stopped.set()
+        if self.thread:
+            self.thread.join(timeout=20)
+
+
+def run(path):
+    SimulationRunner(path).run_forever()
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     try:
-        run(os.getenv("NORX_DB", "data/norx.sqlite3"))
-    except Timeout:
-        raise SystemExit("A simulation worker already owns this database")
+        run(database_path())
     except KeyboardInterrupt:
         pass

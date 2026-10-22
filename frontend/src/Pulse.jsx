@@ -32,7 +32,7 @@ function age(created, now) {
   if (seconds < 3600) return Math.floor(seconds / 60) + "m";
   return Math.floor(seconds / 3600) + "h";
 }
-export default function Pulse({ state, busy, onOpen, onBuy }) {
+export default function Pulse({ state, feedError, busy, onOpen, onBuy }) {
   const [query, setQuery] = useState(""),
     [quick, setQuick] = useState("50"),
     [tab, setTab] = useState("new"),
@@ -43,7 +43,7 @@ export default function Pulse({ state, busy, onOpen, onBuy }) {
     return () => clearInterval(timer);
   }, []);
   const serverNow = state
-    ? state.server_time + (now - state.receivedAt) / 1000
+    ? state.server_time + Math.max(0, now - state.receivedAt) / 1000
     : now / 1000;
   const remaining = state
     ? Math.max(0, Math.ceil(state.next_launch_at - serverNow))
@@ -60,7 +60,13 @@ export default function Pulse({ state, busy, onOpen, onBuy }) {
           <h1>Pulse</h1>
           <span className="feed-status">
             <i />
-            Live simulation
+            {feedError
+              ? "Feed unavailable"
+              : !state
+                ? "Connecting"
+                : state.simulation.running
+                  ? "Live simulation"
+                  : "Simulation paused"}
           </span>
         </div>
         <div className="pulse-controls">
@@ -91,11 +97,15 @@ export default function Pulse({ state, busy, onOpen, onBuy }) {
           liquidity and chart
         </span>
         <span role="timer">
-          {state
-            ? remaining
-              ? `Next launch in ${remaining}s`
-              : "Next batch pending · worker must be running"
-            : "Connecting to the market…"}
+          {feedError
+            ? "Market feed unavailable"
+            : !state
+              ? "Connecting to the market…"
+              : !state.simulation.running
+                ? "Simulation paused · restart the backend to resume"
+                : remaining
+                  ? `Next launch in ${remaining}s`
+                  : "Launching next batch…"}
         </span>
       </div>
       <div className="pulse-mobile-tabs">
@@ -260,7 +270,12 @@ export default function Pulse({ state, busy, onOpen, onBuy }) {
                 {(state?.pulse_counts?.[s.id] || 0) > 60
                   ? " · latest 60"
                   : ""}{" "}
-                <span>●</span> Live
+                <span>●</span>{" "}
+                {feedError
+                  ? "Offline"
+                  : state?.simulation.running
+                    ? "Live"
+                    : "Paused"}
               </div>
             </section>
           );

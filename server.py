@@ -1,4 +1,6 @@
 import os
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 import jwt
@@ -6,15 +8,27 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, StrictInt
 from economy import Market
+from paths import database_path
+from worker import SimulationRunner
 
-market = Market(os.getenv("NORX_DB", "data/norx.sqlite3"))
+market = Market(database_path())
 DEV = os.getenv("NORX_DEV_AUTH") == "1"
 
 
 @asynccontextmanager
 async def lifespan(app):
-    # Simulation runs in the separate worker, never once per API process.
-    yield
+    runner = None
+    if os.getenv("NORX_AUTO_WORKER", "1") != "0":
+        runner = SimulationRunner(market.path)
+        runner.start()
+        logging.getLogger("uvicorn.error").info(
+            "NORX simulation auto-start enabled; database: %s", market.path
+        )
+    try:
+        yield
+    finally:
+        if runner is not None:
+            await asyncio.to_thread(runner.stop)
 
 
 app = FastAPI(title="NORX simulated USD market", lifespan=lifespan)
