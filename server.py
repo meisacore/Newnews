@@ -3,7 +3,6 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 import jwt
 from fastapi import Depends, FastAPI, Header, HTTPException
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, StrictInt
 from economy import Market
@@ -19,6 +18,14 @@ async def lifespan(app):
 
 
 app = FastAPI(title="NORX simulated USD market", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def fresh_api(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.exception_handler(ValueError)
@@ -65,8 +72,8 @@ def config():
 
 
 @app.get("/api/state")
-def state():
-    return market.state()
+def state(selected: str | None = None):
+    return market.state(selected)
 
 
 @app.get("/api/me")
@@ -106,8 +113,4 @@ def trade(body: Execute, user=Depends(identity)):
 
 DIST = Path(__file__).parent / "frontend" / "dist"
 if DIST.is_dir():
-    app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
-
-    @app.get("/")
-    def index():
-        return FileResponse(DIST / "index.html")
+    app.mount("/", StaticFiles(directory=DIST, html=True), name="frontend")

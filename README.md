@@ -1,7 +1,7 @@
 # NORX
 
 A fictional USD trading world with Privy authentication, persistent portfolios,
-30 inexpensive rule-based agents, shared AMM liquidity, and trade-derived candles.
+30 inexpensive rule-based agents, shared AMM liquidity, trade-derived candles, the original animated starry welcome page, and a live three-column Pulse feed.
 No blockchain, wallets, deposits, withdrawals, LLMs, or external price feed.
 
 ## Development
@@ -25,7 +25,7 @@ Run these in separate terminals from the repository root:
 .venv/bin/uvicorn server:app --host 127.0.0.1 --port 8000
 ```
 
-The API serves the built frontend at its root. For frontend development instead,
+The API serves the starry welcome page at `/` and the trading application at `/market.html#pulse`. ENTER WORLD transitions between them. Both pages are built by Vite; the welcome page loads without React or Privy. For frontend development instead,
 run `npm run dev` inside `frontend`; Vite proxies `/api` to port 8000.
 The worker must run separately: API instances never start extra agent loops.
 A local file lock prevents two workers using the same SQLite database.
@@ -71,8 +71,28 @@ consistent database snapshot (use SQLite's backup API, not a live file copy).
 ## Market rules
 
 - Three initial coins: FROG, RCKT, PBL. Each has fixed supply of 1,000,000 tokens.
+- The worker launches **five random coins every 60 seconds**, starting one minute
+  after initialization/upgrade. Names, unique symbols, initial pool USD ($1,500–$12,000),
+  and circulating pool tokens (50,000–200,000) vary. Every coin has independent
+  liquidity, a persisted launch timestamp, and its own trade-derived chart.
+- Each new pool's fictional USD seed is recorded in the `launches` ledger. This is
+  explicit game-world issuance, not USD taken from or given to existing users.
+- The launch schedule survives restarts. After downtime one due batch is launched,
+  followed by the next batch 60 seconds later; missed minutes are not backfilled.
+- Pulse has **New pairs**, **Final stretch**, and **Migrated** columns. Activity
+  progress is cumulative traded USD / starting pool USD: under 70%, 70–100%, and
+  100% respectively. Migrated is an established activity stage, not a blockchain
+  or liquidity migration; every stage trades through the same AMM.
+- Pulse shows up to the newest 60 coins per column, with real counts, market cap,
+  volume, transaction count, holders, search, sorting, and USD buy-ticket shortcuts.
+  An older coin remains tradable by its `market.html#coin/<id>` URL and from its
+  saved portfolio position. Nothing is deleted when it leaves the feed.
+- Agent work is bounded: each tick samples up to eight of the 40 newest markets
+  plus up to four markets with agent holdings. Agents retain finite budgets; newly
+  launched markets compete for attention and liquidity rather than forcing trades.
 - 100,000 circulating tokens per coin initially seed the pool. The remaining
-  900,000 stay locked in treasury; they cannot be sold via the public API.
+  900,000 stay locked in treasury; they cannot be sold via the public API. Random
+  launches vary their circulating allocation; their remaining supply is also locked.
 - Pool seed USD is explicit fictional genesis liquidity, separate from player
   and agent grants. Buy/sell fees are 0.3%, retained in pool liquidity.
 - Trades use integer millionths of USD and whole token quantities. USD buys fill
@@ -104,8 +124,23 @@ npm run build
 
 Tests cover account separation, signed-token rejection, one-time grants under
 concurrency, dollar budgets, quote ownership/expiry/slippage, replay protection,
-restart persistence, candle gaps, market-cap calculations, and conservation across
-300 simulation ticks. The browser smoke test is in `scripts/smoke_browser.py` (requires Playwright and Chromium; run against the local test mode with the Vite server running). The uploaded engine and its original tests are preserved as
+restart persistence, candle gaps, market-cap calculations, conservation across
+300 simulation ticks, timed launch boundaries, duplicate prevention, migration of
+existing databases, lifecycle stages, and trading newly launched coins. The browser smoke test is in `scripts/smoke_browser.py` (requires Playwright and Chromium; run against local test mode with Vite and the worker running). It checks the original welcome transition, Pulse, USD buy/sell, reload recovery, mobile layout, and an actual timed five-coin launch. It takes about a minute. Set `BROWSER_EXECUTABLE` for a system Chromium binary, or install Playwright Chromium with `python -m playwright install chromium`. The uploaded engine and its original tests are preserved as
 `market.py`, `agents.py`, `test_market.py`, and `test_agents.py` for reference; the new
 application runs `economy.py`. The old launch/graduation engine is not wired into
 this MVP.
+
+## Updating an existing local installation
+
+Stop the frontend, backend, and worker before updating source files. Preserve
+`data/`, any `.env` files, and `frontend/.env.local`; do not replace them with
+files from a fresh download. Install requirements, run `npm ci` in `frontend`,
+and restart the three processes. Database migrations are additive and preserve
+accounts, holdings, pools, and trade history. The first new launch arrives about
+one minute after the updated worker starts (or immediately if a saved batch is due).
+
+The sky photo in `frontend/public/sky-bg.jpg` is the optimized image supplied with
+the uploaded NORX design. Its welcome-page star animation and entry transition
+are preserved. Privy loads only when an app ID is configured; local test mode
+does not load the Privy SDK.

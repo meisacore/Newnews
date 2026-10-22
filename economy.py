@@ -12,6 +12,9 @@ from pathlib import Path
 UNIT = 1_000_000  # integer millionths of a dollar
 START = 10_000 * UNIT
 SUPPLY = 1_000_000
+LAUNCH_INTERVAL = 60
+LAUNCH_BATCH = 5
+PULSE_LIMIT = 60
 
 
 class Market:
@@ -28,6 +31,8 @@ class Market:
             CREATE INDEX IF NOT EXISTS trade_time ON trades(coin,ts);
             CREATE TABLE IF NOT EXISTS quotes(id TEXT PRIMARY KEY, account TEXT, coin TEXT, side TEXT, qty INTEGER, amount INTEGER, expires INTEGER, request_id TEXT UNIQUE, result TEXT);
             CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT);
+            CREATE TABLE IF NOT EXISTS launches(coin TEXT PRIMARY KEY, created_at INTEGER NOT NULL, seed_cash INTEGER NOT NULL, activity_goal INTEGER NOT NULL);
+            CREATE INDEX IF NOT EXISTS launch_time ON launches(created_at);
             """)
             db.execute("BEGIN IMMEDIATE")
             if not db.execute("SELECT 1 FROM coins").fetchone():
@@ -72,7 +77,100 @@ class Market:
                     )
                 db.execute("INSERT INTO meta VALUES(?,?)", ("condition", "calm"))
                 db.execute("INSERT INTO meta VALUES(?,?)", ("tick", "0"))
+            # Additive migration: existing accounts, holdings, pools, and history survive.
+            now = int(time.time())
+            db.execute(
+                "INSERT OR IGNORE INTO launches SELECT id, ?, cash, cash FROM coins",
+                (now,),
+            )
+            db.execute(
+                "INSERT OR IGNORE INTO meta VALUES('next_launch_at', ?)",
+                (str(now + LAUNCH_INTERVAL),),
+            )
+            db.execute("INSERT OR IGNORE INTO meta VALUES('launch_sequence', '0')")
             db.commit()
+
+    def _launch_due(self, db, rng, now):
+        due = int(
+            db.execute("SELECT value FROM meta WHERE key='next_launch_at'").fetchone()[
+                0
+            ]
+        )
+        if now < due:
+            return []
+        sequence = int(
+            db.execute("SELECT value FROM meta WHERE key='launch_sequence'").fetchone()[
+                0
+            ]
+        )
+        adjectives = (
+            "Cosmic",
+            "Lunar",
+            "Velvet",
+            "Solar",
+            "Neon",
+            "Golden",
+            "Tiny",
+            "Orbit",
+            "Midnight",
+            "Pixel",
+            "Electric",
+            "Crystal",
+            "Lucky",
+            "Dream",
+            "Turbo",
+            "Silver",
+        )
+        nouns = (
+            "Otter",
+            "Fox",
+            "Comet",
+            "Panda",
+            "Moth",
+            "Peach",
+            "Whale",
+            "Koala",
+            "Cloud",
+            "Kiwi",
+            "Nova",
+            "Gecko",
+            "Duck",
+            "Tiger",
+            "Echo",
+            "Lotus",
+        )
+        launched = []
+        for _ in range(LAUNCH_BATCH):
+            sequence += 1
+            adjective, noun = rng.choice(adjectives), rng.choice(nouns)
+            coin = f"coin-{sequence:08d}"
+            symbol = f"{adjective[:2]}{noun[:2]}{sequence:X}".upper()
+            seed_cash = rng.randint(1500, 12000) * UNIT
+            pool_tokens = rng.randint(50000, 200000)
+            price = seed_cash / pool_tokens / UNIT
+            db.execute(
+                "INSERT INTO coins(id,name,symbol,cash,tokens,reference) VALUES(?,?,?,?,?,?)",
+                (coin, f"{adjective} {noun}", symbol, seed_cash, pool_tokens, price),
+            )
+            db.execute(
+                "INSERT INTO holdings VALUES(?,?,?)",
+                ("treasury", coin, SUPPLY - pool_tokens),
+            )
+            # Explicit fictional launch liquidity; never taken from or credited to users.
+            db.execute(
+                "INSERT INTO launches VALUES(?,?,?,?)",
+                (coin, now, seed_cash, seed_cash),
+            )
+            launched.append(coin)
+        db.execute(
+            "UPDATE meta SET value=? WHERE key='launch_sequence'", (str(sequence),)
+        )
+        # Do not flood the market with missed batches after downtime.
+        db.execute(
+            "UPDATE meta SET value=? WHERE key='next_launch_at'",
+            (str(now + LAUNCH_INTERVAL),),
+        )
+        return launched
 
     @contextmanager
     def connection(self):
@@ -121,6 +219,13 @@ class Market:
                 "cash": a["cash"] / UNIT,
                 "holdings": holdings,
                 "trades": recent,
+                "positions": [
+                    dict(r)
+                    for r in db.execute(
+                        "SELECT c.id,c.name,c.symbol,h.qty,CAST(c.cash AS REAL)/c.tokens/? AS price FROM holdings h JOIN coins c ON c.id=h.coin WHERE h.account=? AND h.qty>0 ORDER BY c.symbol",
+                        (UNIT, identity),
+                    )
+                ],
             }
 
     @staticmethod
@@ -258,9 +363,11 @@ class Market:
             )
             return result
 
-    def tick(self, seed=None):
+    def tick(self, seed=None, now=None):
         rng = random.Random(seed)
+        now = int(time.time()) if now is None else int(now)
         with self.transaction() as db:
+            self._launch_due(db, rng, now)
             tick = (
                 int(db.execute("SELECT value FROM meta WHERE key='tick'").fetchone()[0])
                 + 1
@@ -275,7 +382,17 @@ class Market:
                     "UPDATE meta SET value=? WHERE key='condition'", (condition,)
                 )
             drift = {"calm": 0, "optimistic": 0.0003, "stressed": -0.0003}[condition]
-            for old in db.execute("SELECT * FROM coins").fetchall():
+            # Bound agent work as launches grow; old positions remain eligible for exits.
+            newest = db.execute(
+                "SELECT c.* FROM coins c JOIN launches l ON l.coin=c.id ORDER BY l.created_at DESC,c.id DESC LIMIT 40"
+            ).fetchall()
+            held = db.execute(
+                "SELECT DISTINCT c.* FROM coins c JOIN holdings h ON h.coin=c.id JOIN accounts a ON a.id=h.account WHERE a.kind='agent' AND h.qty>0"
+            ).fetchall()
+            sampled = rng.sample(newest, min(8, len(newest)))
+            sampled += rng.sample(held, min(4, len(held)))
+            markets = {row["id"]: row for row in sampled}
+            for old in markets.values():
                 ref = max(
                     0.000001, old["reference"] * math.exp(drift + rng.gauss(0, 0.002))
                 )
@@ -338,29 +455,40 @@ class Market:
                 (int(time.time()) - 3600,),
             )
 
-    def state(self):
+    def state(self, selected=None):
+        now = int(time.time())
         with self.connection() as db:
+            # Aggregate once, instead of querying complete trade histories per coin.
+            rows = db.execute(
+                """
+                SELECT c.*,l.created_at,l.activity_goal,l.seed_cash,
+                    COALESCE(t.volume,0) AS total_volume,COALESCE(t.volume_24h,0) AS volume_24h,
+                    COALESCE(t.txns,0) AS txns,COALESCE(h.holders,0) AS holders,
+                    (SELECT qty FROM holdings WHERE account='treasury' AND coin=c.id) AS treasury_qty,
+                    (SELECT price FROM trades WHERE coin=c.id AND ts>=? ORDER BY ts,id LIMIT 1) AS first_price
+                FROM coins c JOIN launches l ON l.coin=c.id
+                LEFT JOIN (SELECT coin,SUM(amount) AS volume,SUM(CASE WHEN ts>=? THEN amount ELSE 0 END) AS volume_24h,COUNT(*) AS txns FROM trades GROUP BY coin) t ON t.coin=c.id
+                LEFT JOIN (SELECT coin,COUNT(*) AS holders FROM holdings WHERE account!='treasury' AND qty>0 GROUP BY coin) h ON h.coin=c.id
+                ORDER BY l.created_at DESC,c.id
+            """,
+                (now - 86400, now - 86400),
+            ).fetchall()
             coins = []
-            for r in db.execute("SELECT * FROM coins"):
+            counts = {"new": 0, "stretch": 0, "migrated": 0}
+            for r in rows:
                 p = r["cash"] / r["tokens"] / UNIT
-                circulation = (
-                    SUPPLY
-                    - db.execute(
-                        "SELECT qty FROM holdings WHERE account='treasury' AND coin=?",
-                        (r["id"],),
-                    ).fetchone()[0]
+                circulation = SUPPLY - r["treasury_qty"]
+                progress = min(100, r["total_volume"] / r["activity_goal"] * 100)
+                stage = (
+                    "migrated"
+                    if progress >= 100
+                    else "stretch"
+                    if progress >= 70
+                    else "new"
                 )
-                volume = (
-                    db.execute(
-                        "SELECT COALESCE(SUM(amount),0) FROM trades WHERE coin=? AND ts>=?",
-                        (r["id"], int(time.time()) - 86400),
-                    ).fetchone()[0]
-                    / UNIT
-                )
-                first = db.execute(
-                    "SELECT price FROM trades WHERE coin=? AND ts>=? ORDER BY id LIMIT 1",
-                    (r["id"], int(time.time()) - 86400),
-                ).fetchone()
+                counts[stage] += 1
+                if counts[stage] > PULSE_LIMIT and r["id"] != selected:
+                    continue
                 coins.append(
                     {
                         "id": r["id"],
@@ -370,9 +498,17 @@ class Market:
                         "circulating_supply": circulation,
                         "market_cap": p * circulation,
                         "fdv": p * SUPPLY,
-                        "volume_24h": volume,
-                        "change_24h": (p / first[0] - 1) * 100 if first else 0,
+                        "volume_24h": r["volume_24h"] / UNIT,
+                        "change_24h": (p / r["first_price"] - 1) * 100
+                        if r["first_price"]
+                        else 0,
                         "pool_usd": r["cash"] / UNIT,
+                        "created_at": r["created_at"],
+                        "progress": progress,
+                        "stage": stage,
+                        "txns": r["txns"],
+                        "holders": r["holders"],
+                        "in_feed": counts[stage] <= PULSE_LIMIT,
                     }
                 )
             trades = [
@@ -398,6 +534,15 @@ class Market:
                     "SELECT value FROM meta WHERE key='condition'"
                 ).fetchone()[0],
                 "simulated": True,
+                "pulse_counts": counts,
+                "total_coins": sum(counts.values()),
+                "next_launch_at": int(
+                    db.execute(
+                        "SELECT value FROM meta WHERE key='next_launch_at'"
+                    ).fetchone()[0]
+                ),
+                "server_time": now,
+                "launch_batch": LAUNCH_BATCH,
             }
 
     def candles(self, coin, interval=60, limit=120):
