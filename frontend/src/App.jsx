@@ -6,6 +6,7 @@ import {
 } from "lightweight-charts";
 import "./style.css";
 import Pulse from "./Pulse";
+import Agents from "./Agents";
 import { validateMarketState } from "./marketState";
 
 const dollars = (n) =>
@@ -122,7 +123,9 @@ function readRoute() {
   if (hash.startsWith("coin/"))
     return { view: "coin", coin: decodeURIComponent(hash.slice(5)) };
   return {
-    view: ["pulse", "discover", "portfolio"].includes(hash) ? hash : "pulse",
+    view: ["pulse", "discover", "portfolio", "agents"].includes(hash)
+      ? hash
+      : "pulse",
   };
 }
 export function App({ auth }) {
@@ -250,6 +253,7 @@ export function App({ auth }) {
             ["pulse", "Pulse"],
             ["discover", "Discover"],
             ["portfolio", "Portfolio"],
+            ["agents", "Agents"],
           ].map(([id, label]) => (
             <a
               key={id}
@@ -289,7 +293,9 @@ export function App({ auth }) {
                 ? "Your next move."
                 : route.view === "portfolio"
                   ? "Your portfolio."
-                  : "Explore the market."}
+                  : route.view === "agents"
+                    ? "Meet the traders."
+                    : "Explore the market."}
             </h1>
             <p className="muted">
               Trade fictional coins with virtual dollars in a world that keeps
@@ -300,7 +306,9 @@ export function App({ auth }) {
             <span className="dot" />
             {state?.condition || "Connecting"} economy
             <br />
-            <small>30 independent rule-based agents</small>
+            <small>
+              {state?.agents.length || "—"} independent rule-based agents
+            </small>
           </div>
         </section>
       )}
@@ -319,6 +327,7 @@ export function App({ auth }) {
           {notice}
         </div>
       )}
+      {route.view === "agents" && <Agents state={state} />}
       {route.view === "pulse" && (
         <Pulse
           state={state}
@@ -540,9 +549,16 @@ export function App({ auth }) {
                   </span>{" "}
                   {t.qty.toLocaleString()} {t.coin}
                   <small>
-                    {t.account.startsWith("agent-") ? t.account : "Player"} ·{" "}
+                    {t.agent_name ||
+                      (t.account.startsWith("agent-")
+                        ? t.account
+                        : "Player")}{" "}
+                    {t.persona && "· " + t.persona} ·{" "}
                     {new Date(t.ts * 1000).toLocaleTimeString()}
                   </small>
+                  {t.persona && (
+                    <small className="trade-reason">{t.reason}</small>
+                  )}
                 </div>
                 <span>{dollars(t.amount / 1e6)}</span>
               </div>

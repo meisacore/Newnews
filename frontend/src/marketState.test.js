@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { validateMarketState } from "./marketState.js";
 
 const valid = () => ({
-  api_version: 2,
+  api_version: 3,
   coins: [{ id: "frog", stage: "new" }],
   next_launch_at: 1060,
   server_time: 1000,
@@ -11,6 +11,7 @@ const valid = () => ({
   simulation: { running: true, last_tick_at: 1000 },
 });
 test("old backend response is rejected instead of displaying empty Pulse", () => {
+  assert.throws(() => validateMarketState({...valid(),api_version:2}), /backend is out of date/);
   assert.throws(
     () => validateMarketState({ coins: [{ id: "frog", price: 0.2 }] }),
     /backend is out of date/,

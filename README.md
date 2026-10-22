@@ -1,7 +1,7 @@
 # NORX
 
 A fictional USD trading world with Privy authentication, persistent portfolios,
-30 inexpensive rule-based agents, shared AMM liquidity, trade-derived candles, the original animated starry welcome page, and a live three-column Pulse feed.
+36 rule-based agents with different wealth and judgment, shared AMM liquidity, trade-derived candles, the original animated starry welcome page, and a live three-column Pulse feed.
 No blockchain, wallets, deposits, withdrawals, LLMs, or external price feed.
 
 ## Development
@@ -166,5 +166,51 @@ updated backend and Vite. The API should immediately return the three starter co
 (or the existing saved world), and the first scheduled five-coin batch follows
 within a minute. The frontend rejects an outdated API response with a clear restart
 message instead of silently interpreting missing stage metadata as zero coins.
-`GET /api/state` reports `api_version: 2`, `simulation.running`, `last_tick_at`,
+`GET /api/state` reports `api_version: 3`, `simulation.running`, `last_tick_at`,
 `total_coins`, and `next_launch_at`. No database deletion is needed.
+
+## Agent personalities and wealthy traders
+
+The original shared 3%-of-cash order rule and $15,000 maximum initial agent
+balance have been replaced by personality-specific sizing and execution checks.
+The existing 30 traders retain their current balances and holdings and receive
+patient-value, contrarian, disciplined-trend, FOMO, gambler, or small-retail
+personalities. Six additional agents receive these one-time virtual USD grants:
+
+| Agent | Personality | Initial virtual USD |
+|---|---|---:|
+| Atlas | Patient value investor | $500,000 |
+| Sage | Cautious contrarian | $350,000 |
+| Comet | Reckless whale | $1,500,000 |
+| Lucky | Impulsive gambler | $750,000 |
+| Echo | FOMO chaser | $250,000 |
+| Vector | Disciplined trend trader | $400,000 |
+
+The $3.75 million in new fictional capital is recorded in `agent_grants`, once
+per new agent. Restarting or losing money does not refill these accounts. Human
+accounts and original agent balances are not changed by the migration.
+
+Disciplined agents check their noisy perceived value against **actual average
+execution cost including fees**, and size down to respect low price-impact
+limits. They can hold instead of buying an overpriced asset. Reckless whales
+ignore perceived value, may commit 8–30% of available cash to an order within
+their exposure and execution limits, and may dump positions without protecting
+profit. Gamblers and FOMO agents make different speculative decisions; panic
+selling and overpayment can produce real losses within the fictional ledger.
+Even reckless agents retain hard solvency and liquidity limits. A single order
+can tolerate up to 250% average execution premium, so it can move a thin market
+sharply; no agent may spend money it does not have or empty a pool. Global
+cooldowns prevent one bot trading every sampled coin in the same tick.
+
+The **Agents** tab shows personalities, available cash, one-time grants, trade
+counts, exposure limits, and each agent's biggest buy. **Whale watch** on Pulse
+retains the ten latest trades of $1,000 or more; opening an item shows its coin's
+chart. Trade activity includes agent names and the rule behind their decision.
+Wealth does not imply good judgment, and disciplined rules do not guarantee a
+profitable outcome. All order sizes, quotes, prices, and cash flows are real
+within the simulation, not decorative large-order messages.
+
+The personality browser check is `scripts/smoke_agents.py`: it verifies the
+36-agent dashboard, one-time grant labels, naturally occurring large trades,
+Whale watch navigation into the chart, and mobile layout. It does not inject
+fake trades. Set `NORX_TEST_URL` and `BROWSER_EXECUTABLE` as needed.

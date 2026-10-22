@@ -950,3 +950,212 @@ body {
 .holding-link:hover {
   text-decoration: underline;
 }
+/* Wealth and judgment are visible without needing to catch a fleeting trade. */
+.whale-watch {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border: 1px solid #4b4737;
+  border-radius: 7px;
+  background: #25241b55;
+  min-width: 0;
+}
+.whale-watch-title {
+  flex-shrink: 0;
+}
+.whale-watch-title strong {
+  display: block;
+  font-size: 12px;
+  color: #d6c29a;
+  font-weight: 500;
+}
+.whale-watch-title small {
+  display: block;
+  color: #8d9da8;
+  font-size: 9px;
+  margin-top: 5px;
+}
+.whale-watch-trades {
+  display: flex;
+  gap: 10px;
+  overflow: auto;
+  scrollbar-width: thin;
+  min-width: 0;
+}
+.whale-watch-trades button {
+  flex-shrink: 0;
+  background: #101a23;
+  border-color: #354047;
+  text-align: left;
+  padding: 8px 12px;
+  min-width: 155px;
+}
+.whale-watch-trades button > span {
+  font-size: 12px;
+  font-weight: 500;
+}
+.whale-watch-trades small {
+  display: block;
+  font-size: 9px;
+  color: #93a3af;
+  margin-top: 5px;
+}
+.agent-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin: 0 0 24px;
+}
+.agent-summary > div {
+  padding: 22px;
+  border: 1px solid #34414b;
+  border-radius: 8px;
+  background: #101921;
+}
+.agent-summary small {
+  display: block;
+  font-size: 10px;
+  color: #92a4b1;
+  letter-spacing: 1px;
+}
+.agent-summary strong {
+  font-size: 27px;
+  font-weight: 500;
+  display: block;
+  margin-top: 12px;
+  color: #d6c29a;
+}
+.agent-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 22px 0;
+}
+.agent-card {
+  padding: 20px;
+  background: #101921;
+  border: 1px solid #2a3943;
+  border-radius: 9px;
+  min-width: 0;
+}
+.agent-card.speculative {
+  border-top-color: #bb9673;
+}
+.agent-card.disciplined {
+  border-top-color: #6aad9b;
+}
+.agent-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.agent-heading h2 {
+  font-size: 17px;
+  margin: 0 0 5px;
+}
+.agent-heading div > span {
+  font-size: 11px;
+  color: #9eafbc;
+}
+.agent-badge {
+  font-size: 9px;
+  border: 1px solid #3b4d46;
+  padding: 5px 6px;
+  border-radius: 4px;
+  color: #9cc7b8;
+  white-space: nowrap;
+}
+.speculative .agent-badge {
+  color: #d2b18c;
+  border-color: #63513e;
+}
+.agent-cash {
+  display: block;
+  font-size: 25px;
+  font-weight: 500;
+  margin: 24px 0;
+}
+.agent-cash small {
+  display: block;
+  font-size: 10px;
+  color: #8ea0af;
+  font-weight: 400;
+  margin-top: 6px;
+}
+.agent-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.3fr;
+  gap: 8px;
+}
+.agent-facts small {
+  display: block;
+  color: #8398a8;
+  font-size: 9px;
+}
+.agent-facts strong {
+  display: block;
+  font-weight: 500;
+  font-size: 12px;
+  margin-top: 7px;
+}
+.agent-card > p {
+  font-size: 10px;
+  color: #8096a6;
+  border-top: 1px solid #293640;
+  margin: 18px 0 0;
+  padding-top: 13px;
+}
+.trade-reason {
+  max-width: 430px;
+  line-height: 1.5;
+  color: #b3a58b !important;
+}
+.world-nav {
+  gap: 20px;
+}
+@media (max-width: 1050px) {
+  .agent-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .agent-summary strong {
+    font-size: 23px;
+  }
+}
+@media (max-width: 700px) {
+  .agent-summary {
+    gap: 7px;
+  }
+  .agent-summary > div {
+    padding: 14px 10px;
+  }
+  .agent-summary small {
+    font-size: 8px;
+    letter-spacing: 0.3px;
+    line-height: 1.6;
+  }
+  .agent-summary strong {
+    font-size: 19px;
+  }
+  .agent-grid {
+    grid-template-columns: 1fr;
+  }
+  .whale-watch {
+    gap: 10px;
+    padding: 10px;
+  }
+  .whale-watch-title strong {
+    font-size: 11px;
+  }
+  .whale-watch-title small {
+    font-size: 8px;
+  }
+  .world-nav {
+    gap: 24px;
+  }
+  .trade-reason {
+    max-width: 230px;
+  }
+}

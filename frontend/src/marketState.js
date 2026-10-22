@@ -1,6 +1,6 @@
 export function validateMarketState(data) {
   if (
-    data?.api_version !== 2 ||
+    data?.api_version !== 3 ||
     !Array.isArray(data.coins) ||
     !Number.isFinite(data.next_launch_at) ||
     !Number.isFinite(data.server_time) ||

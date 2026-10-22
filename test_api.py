@@ -91,7 +91,7 @@ class ApiTests(unittest.TestCase):
                         "Backend did not start the simulation and launch a due batch"
                     )
                 time.sleep(0.02)
-            self.assertEqual(state["api_version"], 2)
+            self.assertEqual(state["api_version"], 3)
             self.assertEqual(state["total_coins"], 8)
         from worker import worker_lock
 

@@ -108,6 +108,31 @@ export default function Pulse({ state, feedError, busy, onOpen, onBuy }) {
                   : "Launching next batch…"}
         </span>
       </div>
+      {state?.large_trades?.length > 0 && (
+        <section className="whale-watch" aria-label="Large trades">
+          <div className="whale-watch-title">
+            <strong>Whale watch</strong>
+            <small>Recent trades $1k+</small>
+          </div>
+          <div className="whale-watch-trades">
+            {state.large_trades.map((t) => (
+              <button
+                key={t.id}
+                disabled={busy}
+                onClick={() => onOpen(t.coin)}
+                title={t.reason}
+              >
+                <span className={t.side === "buy" ? "up" : "down"}>
+                  {t.side.toUpperCase()} {money(t.amount / 1e6)}
+                </span>
+                <small>
+                  {t.agent_name || "Player"} · {t.persona || "Player trade"}
+                </small>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
       <div className="pulse-mobile-tabs">
         {stages.map((s) => (
           <button

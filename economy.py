@@ -8,6 +8,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
+from personalities import PERSONALITIES, WEALTHY_ENTRANTS, intention
 
 UNIT = 1_000_000  # integer millionths of a dollar
 START = 10_000 * UNIT
@@ -33,6 +34,8 @@ class Market:
             CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT);
             CREATE TABLE IF NOT EXISTS launches(coin TEXT PRIMARY KEY, created_at INTEGER NOT NULL, seed_cash INTEGER NOT NULL, activity_goal INTEGER NOT NULL);
             CREATE INDEX IF NOT EXISTS launch_time ON launches(created_at);
+            CREATE TABLE IF NOT EXISTS agent_personas(account TEXT PRIMARY KEY, name TEXT NOT NULL, persona TEXT NOT NULL, next_tick INTEGER NOT NULL DEFAULT 0);
+            CREATE TABLE IF NOT EXISTS agent_grants(account TEXT PRIMARY KEY, amount INTEGER NOT NULL, created_at INTEGER NOT NULL);
             """)
             db.execute("BEGIN IMMEDIATE")
             if not db.execute("SELECT 1 FROM coins").fetchone():
@@ -88,7 +91,49 @@ class Market:
                 (str(now + LAUNCH_INTERVAL),),
             )
             db.execute("INSERT OR IGNORE INTO meta VALUES('launch_sequence', '0')")
+            self._ensure_personalities(db, now)
             db.commit()
+
+    def _ensure_personalities(self, db, now):
+        variants = {
+            "value": ("patient_value", "contrarian"),
+            "momentum": ("careful_trend", "fomo"),
+            "noise": ("retail_noise", "gambler"),
+        }
+        counts = dict.fromkeys(variants, 0)
+        for agent in db.execute(
+            "SELECT id,strategy FROM accounts WHERE kind='agent' ORDER BY id"
+        ).fetchall():
+            strategy = agent["strategy"] if agent["strategy"] in variants else "noise"
+            choices = variants[strategy]
+            persona = choices[counts[strategy] % len(choices)]
+            counts[strategy] += 1
+            db.execute(
+                "INSERT OR IGNORE INTO agent_personas(account,name,persona) VALUES(?,?,?)",
+                (agent["id"], agent["id"].replace("agent-", "Trader "), persona),
+            )
+        for identity, name, persona, dollars in WEALTHY_ENTRANTS:
+            policy = PERSONALITIES[persona]
+            created = db.execute(
+                "INSERT OR IGNORE INTO accounts VALUES(?,?,?,?,?,?)",
+                (
+                    identity,
+                    dollars * UNIT,
+                    "agent",
+                    policy.strategy,
+                    policy.exposure,
+                    policy.activation,
+                ),
+            )
+            if created.rowcount:
+                db.execute(
+                    "INSERT INTO agent_grants VALUES(?,?,?)",
+                    (identity, dollars * UNIT, now),
+                )
+            db.execute(
+                "INSERT OR IGNORE INTO agent_personas(account,name,persona) VALUES(?,?,?)",
+                (identity, name, persona),
+            )
 
     def _launch_due(self, db, rng, now):
         due = int(
@@ -402,48 +447,19 @@ class Market:
                 )
                 db.execute("UPDATE coins SET reference=? WHERE id=?", (ref, old["id"]))
                 agents = db.execute(
-                    "SELECT * FROM accounts WHERE kind='agent'"
+                    "SELECT a.*,p.persona,p.name,p.next_tick FROM accounts a JOIN agent_personas p ON p.account=a.id WHERE a.kind='agent'"
                 ).fetchall()
                 rng.shuffle(agents)
                 for a in agents:
-                    if rng.random() > a["patience"]:
+                    policy = PERSONALITIES[a["persona"]]
+                    if tick < a["next_tick"] or rng.random() > policy.activation:
                         continue
-                    c = db.execute(
-                        "SELECT * FROM coins WHERE id=?", (old["id"],)
-                    ).fetchone()
-                    price = c["cash"] / c["tokens"] / UNIT
-                    h = db.execute(
-                        "SELECT qty FROM holdings WHERE account=? AND coin=?",
-                        (a["id"], c["id"]),
-                    ).fetchone()
-                    held = h["qty"] if h else 0
-                    # Total portfolio value, not just this coin, controls exposure.
-                    equity = a["cash"] + sum(
-                        r["qty"] * r["cash"] / r["tokens"]
-                        for r in db.execute(
-                            "SELECT h.qty,c.cash,c.tokens FROM holdings h JOIN coins c ON h.coin=c.id WHERE h.account=?",
-                            (a["id"],),
+                    if self._agent_decision(db, a, old["id"], rng):
+                        # One global cooldown, not one trade for every sampled coin.
+                        db.execute(
+                            "UPDATE agent_personas SET next_tick=? WHERE account=?",
+                            (tick + rng.randint(*policy.cooldown), a["id"]),
                         )
-                    )
-                    if a["strategy"] == "value":
-                        signal = 0.4 * math.log(
-                            ref * math.exp(rng.gauss(0, 0.015)) / price
-                        )
-                    elif a["strategy"] == "momentum":
-                        signal = 3 * c["momentum"] + rng.gauss(0, 0.005)
-                    else:
-                        signal = rng.gauss(0, 0.035)
-                    target = min(1, max(0, 0.35 + signal * 8)) * a["risk"] * equity
-                    gap = target - held * price * UNIT
-                    reason = f"{a['strategy'].title()}: {'increase' if gap > 0 else 'reduce'} exposure in {condition} conditions"
-                    if gap > max(UNIT, equity * 0.002):
-                        budget = int(min(gap, a["cash"] * 0.03))
-                        qty = self.quantity(c, budget)
-                        if qty:
-                            self._trade(db, a["id"], c, "buy", qty, reason)
-                    elif gap < -max(UNIT, equity * 0.002) and held:
-                        qty = min(held, max(1, int(-gap / (price * UNIT))))
-                        self._trade(db, a["id"], c, "sell", qty, reason)
                 latest = db.execute(
                     "SELECT * FROM coins WHERE id=?", (old["id"],)
                 ).fetchone()
@@ -458,6 +474,70 @@ class Market:
                 "DELETE FROM quotes WHERE result IS NULL AND expires<?",
                 (int(time.time()) - 3600,),
             )
+
+    def _agent_decision(self, db, agent, coin, rng):
+        policy = PERSONALITIES[agent["persona"]]
+        c = db.execute("SELECT * FROM coins WHERE id=?", (coin,)).fetchone()
+        account = db.execute(
+            "SELECT cash FROM accounts WHERE id=?", (agent["id"],)
+        ).fetchone()
+        cash = account["cash"]
+        positions = db.execute(
+            "SELECT h.qty,c.* FROM holdings h JOIN coins c ON c.id=h.coin WHERE h.account=? AND h.qty>0",
+            (agent["id"],),
+        ).fetchall()
+        held = next((row["qty"] for row in positions if row["id"] == coin), 0)
+        exposure = self.amount(c, "sell", held) if held else 0
+        equity = cash + sum(self.amount(row, "sell", row["qty"]) for row in positions)
+        price = c["cash"] / c["tokens"] / UNIT
+        fraction, estimate, explanation = intention(
+            agent["persona"], price, c["reference"], c["momentum"], bool(held), rng
+        )
+        if fraction is None:
+            return False
+        gap = fraction * equity - exposure
+        band = max(UNIT, equity * 0.001)
+        reason = f"{agent['name']} · {policy.label}: {explanation}"
+        if gap > band:
+            budget = int(
+                min(gap, cash * rng.uniform(policy.order_min, policy.order_max))
+            )
+            qty = self._agent_buy_quantity(c, budget, policy, estimate)
+            if not qty:
+                return False
+            self._trade(db, agent["id"], c, "buy", qty, reason)
+            return True
+        if gap < -band and held:
+            qty = (
+                held
+                if fraction == 0
+                else min(held, max(1, int(held * min(1, -gap / max(1, exposure)))))
+            )
+            if self.amount(c, "sell", qty) > 0:
+                self._trade(db, agent["id"], c, "sell", qty, reason)
+                return True
+        return False
+
+    def _agent_buy_quantity(self, coin, budget, policy, estimate):
+        # Both cost tests worsen monotonically with quantity, so size down rather
+        # than reject a useful small trade or let any bot empty the pool.
+        lo, hi = 0, self.quantity(coin, max(0, budget))
+        spot = coin["cash"] / coin["tokens"]
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            paid = self.amount(coin, "buy", mid)
+            acceptable = paid / mid <= spot * (1 + policy.impact_bps / 10000)
+            if policy.disciplined:
+                acceptable = (
+                    acceptable
+                    and estimate is not None
+                    and paid / mid <= estimate * UNIT * 0.995
+                )
+            if acceptable:
+                lo = mid
+            else:
+                hi = mid - 1
+        return lo
 
     def state(self, selected=None):
         now = int(time.time())
@@ -515,33 +595,71 @@ class Market:
                         "in_feed": counts[stage] <= PULSE_LIMIT,
                     }
                 )
+            names = {
+                row["account"]: dict(row)
+                for row in db.execute("SELECT * FROM agent_personas")
+            }
+
+            def public_trade(row):
+                value = dict(row)
+                bot = names.get(row["account"])
+                value["account"] = row["account"] if bot else "Player"
+                value["agent_name"] = bot["name"] if bot else "Player"
+                value["persona"] = PERSONALITIES[bot["persona"]].label if bot else None
+                return value
+
             trades = [
-                {
-                    **dict(r),
-                    "account": r["account"]
-                    if r["account"].startswith("agent-")
-                    else "Player",
-                }
+                public_trade(r)
                 for r in db.execute("SELECT * FROM trades ORDER BY id DESC LIMIT 30")
             ]
-            agents = [
-                dict(r)
+            large_trades = [
+                public_trade(r)
                 for r in db.execute(
-                    "SELECT id,cash,strategy,risk,patience FROM accounts WHERE kind='agent'"
+                    "SELECT * FROM trades WHERE amount>=? ORDER BY id DESC LIMIT 10",
+                    (1000 * UNIT,),
                 )
             ]
+            stats = {
+                r["account"]: r
+                for r in db.execute(
+                    "SELECT account,COUNT(*) AS trades,MAX(CASE WHEN side='buy' THEN amount ELSE 0 END) AS biggest_buy FROM trades GROUP BY account"
+                )
+            }
+            agents = []
+            for a in db.execute(
+                "SELECT a.*,p.name,p.persona,g.amount AS starting_cash FROM accounts a JOIN agent_personas p ON p.account=a.id LEFT JOIN agent_grants g ON g.account=a.id WHERE a.kind='agent'"
+            ):
+                policy = PERSONALITIES[a["persona"]]
+                summary = stats.get(a["id"])
+                agents.append(
+                    {
+                        "id": a["id"],
+                        "name": a["name"],
+                        "cash": a["cash"],
+                        "strategy": policy.strategy,
+                        "persona": a["persona"],
+                        "personality": policy.label,
+                        "disciplined": policy.disciplined,
+                        "risk": policy.exposure,
+                        "patience": policy.activation,
+                        "starting_cash": a["starting_cash"],
+                        "trades": summary["trades"] if summary else 0,
+                        "biggest_buy": summary["biggest_buy"] if summary else 0,
+                    }
+                )
             heartbeat = db.execute(
                 "SELECT value FROM meta WHERE key='last_tick_at'"
             ).fetchone()
             last_tick = int(heartbeat[0]) if heartbeat else None
             return {
-                "api_version": 2,
+                "api_version": 3,
                 "simulation": {
                     "running": last_tick is not None and 0 <= now - last_tick <= 10,
                     "last_tick_at": last_tick,
                 },
                 "coins": coins,
                 "trades": trades,
+                "large_trades": large_trades,
                 "agents": agents,
                 "condition": db.execute(
                     "SELECT value FROM meta WHERE key='condition'"
