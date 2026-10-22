@@ -1,21 +1,24 @@
-"""Run exactly one simulation writer per database; restart safely after deployment."""
+"""Run one simulation writer per database on Windows, macOS, or Linux."""
 
-import fcntl
 import logging
 import os
 import time
 from pathlib import Path
+
+from filelock import FileLock, Timeout
+
 from economy import Market
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    path = os.getenv("NORX_DB", "data/norx.sqlite3")
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    with open(path + ".worker.lock", "w") as lock:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            raise SystemExit("A simulation worker already owns this database")
+
+def worker_lock(path):
+    """Use an OS-backed lock; process exit also releases ownership."""
+    database = Path(path).resolve()
+    database.parent.mkdir(parents=True, exist_ok=True)
+    return FileLock(str(database) + ".worker.lock", timeout=0)
+
+
+def run(path):
+    with worker_lock(path):
         market = Market(path)
         logging.info("NORX simulation running; virtual USD only")
         while True:
@@ -24,3 +27,13 @@ if __name__ == "__main__":
             except Exception:
                 logging.exception("Tick rolled back; retrying next tick")
             time.sleep(2)
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    try:
+        run(os.getenv("NORX_DB", "data/norx.sqlite3"))
+    except Timeout:
+        raise SystemExit("A simulation worker already owns this database")
+    except KeyboardInterrupt:
+        pass
