@@ -77,6 +77,73 @@ class ApiTests(unittest.TestCase):
             self.client.get("/api/me", headers=self.token()).json()["cash"], 10000
         )
 
+    def test_jwks_discovery_verifies_identity_and_fails_closed(self):
+        import json
+
+        jwk = json.loads(jwt.algorithms.ECAlgorithm.to_jwk(self.key.public_key()))
+        jwk.update(kid="test-key", alg="ES256", use="sig")
+        client = jwt.PyJWKClient("https://example.invalid/jwks.json")
+        headers = self.token()
+        claims = jwt.decode(
+            headers["Authorization"][7:], options={"verify_signature": False}
+        )
+        headers = {
+            "Authorization": "Bearer "
+            + jwt.encode(
+                claims, self.key, algorithm="ES256", headers={"kid": "test-key"}
+            )
+        }
+        with (
+            patch.dict(os.environ, {"PRIVY_VERIFICATION_KEY": ""}),
+            patch.object(self.server, "signing_keys", return_value=client),
+            patch.object(client, "fetch_data", return_value={"keys": [jwk]}),
+        ):
+            self.assertEqual(
+                self.client.get("/api/me", headers=headers).status_code, 200
+            )
+            claims["aud"] = "wrong-app"
+            wrong = {
+                "Authorization": "Bearer "
+                + jwt.encode(
+                    claims, self.key, algorithm="ES256", headers={"kid": "test-key"}
+                )
+            }
+            self.assertEqual(self.client.get("/api/me", headers=wrong).status_code, 401)
+            impostor = ec.generate_private_key(ec.SECP256R1())
+            claims["aud"] = "test-app"
+            wrong = {
+                "Authorization": "Bearer "
+                + jwt.encode(
+                    claims, impostor, algorithm="ES256", headers={"kid": "test-key"}
+                )
+            }
+            self.assertEqual(self.client.get("/api/me", headers=wrong).status_code, 401)
+        with (
+            patch.dict(os.environ, {"PRIVY_VERIFICATION_KEY": ""}),
+            patch.object(self.server, "signing_keys") as keys,
+        ):
+            keys.return_value.get_signing_key_from_jwt.side_effect = (
+                jwt.PyJWKClientConnectionError("offline")
+            )
+            self.assertEqual(
+                self.client.get("/api/me", headers=headers).status_code, 503
+            )
+            self.assertEqual(
+                self.client.get(
+                    "/api/me", headers={"Authorization": "Bearer local-demo"}
+                ).status_code,
+                401,
+            )
+            keys.reset_mock()
+            bad = jwt.encode(claims, "test-only-key", algorithm="HS256")
+            self.assertEqual(
+                self.client.get(
+                    "/api/me", headers={"Authorization": "Bearer " + bad}
+                ).status_code,
+                401,
+            )
+            keys.assert_not_called()
+
     def test_backend_starts_simulation_and_launches_without_standalone_worker(self):
         with self.server.market.transaction() as db:
             db.execute("UPDATE meta SET value='0' WHERE key='next_launch_at'")

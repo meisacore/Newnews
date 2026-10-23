@@ -33,7 +33,7 @@ $env:NORX_DEV_AUTH="1"
 ```
 
 Then run `npm run dev` in `frontend` in a second terminal. Keep the frontend app ID
-unset to use the local test account.
+explicitly empty (`VITE_PRIVY_APP_ID=` in `frontend/.env.local`) to use the local test account.
 
 The API serves the starry welcome page at `/` and the trading application at `/market.html#pulse`. ENTER WORLD transitions between them. Both pages are built by Vite; the welcome page loads without React or Privy. For frontend development instead,
 run `npm run dev` inside `frontend`; Vite proxies `/api` to port 8000.
@@ -45,24 +45,45 @@ resolve from the project root for both processes, regardless of terminal directo
 
 ### Privy setup
 
-1. Create/select a Privy app and enable the desired email/Google login methods.
-2. Configure your development and deployment origins in the Privy dashboard.
-3. Set `PRIVY_APP_ID` on the backend and `VITE_PRIVY_APP_ID` in
-   `frontend/.env.local` (see the example files). They must identify the same app.
-4. Set `PRIVY_VERIFICATION_KEY` to the app's ES256 verification **public key** in
-   PEM format. Literal `\n` sequences in that environment variable are supported.
-   No app secret is required by this implementation.
-5. Rebuild the frontend after changing its app ID and restart the backend after
-   changing server environment variables.
+The public App ID `cmvjqf2i1030e0hl9wck83jj1` is configured in
+`app-config.json` for both frontend builds and the backend. No app secret is needed.
 
-The backend verifies the signature, ES256 algorithm, issuer `privy.io`, app audience,
-expiration, issued-at claim, and Privy subject before trusting an identity.
-Public browsing works without configuration; authenticated trading is disabled
-until configuration is supplied. Live Privy sign-in requires your own app settings
-and has not been tested using a real Privy account in this environment.
+1. In that app's Privy dashboard, enable **email** and **Google** login (disable
+   Google in `frontend/src/PrivyRoot.jsx` if you only enable email).
+2. Add `http://127.0.0.1:5173` and `http://localhost:5173` to allowed origins.
+   Add your exact HTTPS origin when deploying. If testing the built backend UI,
+   also add `http://127.0.0.1:8000`.
+3. Stop the backend and remove the development bypass. In PowerShell:
 
-For a **local smoke test only**, start the backend with `NORX_DEV_AUTH=1` and leave
-the frontend app ID unset. The UI offers an explicitly labeled shared local test
+   ```powershell
+   $env:NORX_DEV_AUTH="0"
+   .\.venv\Scripts\python -m uvicorn server:app --host 127.0.0.1 --port 8000
+   ```
+
+4. Remove an empty `VITE_PRIVY_APP_ID=` override from `frontend/.env.local`, or
+   set it to the configured App ID. Restart Vite with `npm run dev` (or rebuild
+   with `npm run build` for the backend-served UI).
+5. Sign in, make a small fictional trade, sign out, and sign back in with the same
+   login method. Confirm that your balance and holdings persist in the same economy.
+
+`PRIVY_APP_ID` (backend environment) and `VITE_PRIVY_APP_ID` (frontend environment)
+can override the shared default; both must use the same app. Backend environment
+variables are set in your terminal/hosting settings; `.env.example` is a reference,
+not automatically loaded by the server.
+
+The backend fetches and caches Privy's public ES256 keys from its app-specific
+JWKS endpoint and supports key rotation. An optional `PRIVY_VERIFICATION_KEY` PEM
+public key can override this. It verifies signature, ES256 algorithm, issuer
+`privy.io`, app audience, expiration, issued-at claim and Privy subject. Network
+verification failures do not grant access. Wallet creation and wallet UIs stay off.
+
+A Privy account has its own saved portfolio. The shared local demo account's
+holdings are not automatically transferred to it. Authentication tests use locally
+signed tokens and mocked signing-key discovery; live sign-in still needs dashboard
+configuration and a browser with access to Privy.
+
+For a **local smoke test only**, start the backend with `NORX_DEV_AUTH=1` and explicitly set
+`VITE_PRIVY_APP_ID=` in `frontend/.env.local` to override the shared default. The UI offers an explicitly labeled shared local test
 account. Never enable this bypass on a public deployment. Local development binds
 to loopback by default.
 
@@ -269,7 +290,9 @@ feed, using the same public identity redaction. This prevents an active world
 from hiding a quieter coin's executions. This is market-order simulation; the
 interface does not offer unsupported limit orders or invented performance data.
 
-After building, run against an API with `NORX_DEV_AUTH=1`:
+For automated local-account browser tests, build with an explicitly empty
+`VITE_PRIVY_APP_ID=` override first, then run against a temporary API with
+`NORX_DEV_AUTH=1`:
 
 ```sh
 NORX_TEST_URL=http://127.0.0.1:8000 BROWSER_EXECUTABLE=/usr/bin/chromium .venv/bin/python scripts/smoke_terminal.py
@@ -311,7 +334,8 @@ starts. A failed app-module load displays an error and reload link; a React star
 error is caught by the app boundary. Slow startup displays guidance after 15 seconds.
 The welcome and exchange no longer wait for external Google Fonts.
 
-Vite selects the authentication entry from `VITE_PRIVY_APP_ID`: without an ID,
+Vite uses the public App ID in `app-config.json` by default. An explicit empty
+`VITE_PRIVY_APP_ID=` override selects local testing: without an ID,
 local mode does not scan or bundle the Privy SDK. With an ID, the lazy Privy entry
 is used. Restart Vite after changing that setting or updating the project.
 If an older development dependency cache is still present, stop the frontend and

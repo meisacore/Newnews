@@ -2,6 +2,8 @@ import os
 import asyncio
 import logging
 import threading
+import json
+from functools import lru_cache
 from scenarios import SCENARIOS
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -12,6 +14,10 @@ from pydantic import BaseModel, Field, StrictInt
 from economy import Market
 from paths import database_path
 from worker import SimulationRunner
+
+DEFAULT_APP_ID = json.loads((Path(__file__).parent / "app-config.json").read_text())[
+    "privy_app_id"
+]
 
 market = Market(database_path())
 worlds = {}
@@ -83,19 +89,38 @@ async def invalid(request, exc):
     return JSONResponse({"detail": str(exc)}, status_code=400)
 
 
+@lru_cache(maxsize=8)
+def signing_keys(app_id):
+    # This URL is built only from server configuration, never a token-supplied URL.
+    from urllib.parse import quote
+
+    return jwt.PyJWKClient(
+        "https://auth.privy.io/api/v1/apps/" + quote(app_id, safe="") + "/jwks.json",
+        cache_jwk_set=True,
+        lifespan=3600,
+        timeout=5,
+    )
+
+
 def identity(authorization: str = Header(default="")):
     if DEV and authorization == "Bearer local-demo":
         return "local:demo"
-    app_id = os.getenv("PRIVY_APP_ID")
+    app_id = os.getenv("PRIVY_APP_ID", DEFAULT_APP_ID)
     key = os.getenv("PRIVY_VERIFICATION_KEY", "").replace("\\n", "\n")
-    if not app_id or not key:
+    if not app_id:
         raise HTTPException(503, "Privy authentication is not configured")
     if not authorization.startswith("Bearer "):
         raise HTTPException(401, "Sign in to trade")
     try:
+        token = authorization[7:]
+        if jwt.get_unverified_header(token).get("alg") != "ES256":
+            raise ValueError("Unsupported signing algorithm")
+        verification_key = (
+            key or signing_keys(app_id).get_signing_key_from_jwt(token).key
+        )
         claims = jwt.decode(
             authorization[7:],
-            key,
+            verification_key,
             algorithms=["ES256"],
             audience=app_id,
             issuer="privy.io",
@@ -105,6 +130,10 @@ def identity(authorization: str = Header(default="")):
         if not isinstance(sub, str) or not sub.startswith("did:privy:"):
             raise ValueError("Invalid identity")
         return sub
+    except jwt.PyJWKClientConnectionError:
+        raise HTTPException(
+            503, "Cannot reach Privy verification service. Please retry."
+        )
     except (jwt.PyJWTError, ValueError):
         raise HTTPException(401, "Invalid or expired session")
 
@@ -114,9 +143,7 @@ def config():
     return {
         "dev_auth": DEV,
         "economies": SCENARIOS,
-        "privy_configured": bool(
-            os.getenv("PRIVY_APP_ID") and os.getenv("PRIVY_VERIFICATION_KEY")
-        ),
+        "privy_configured": bool(os.getenv("PRIVY_APP_ID", DEFAULT_APP_ID)),
     }
 
 
