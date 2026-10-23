@@ -203,7 +203,7 @@ sharply; no agent may spend money it does not have or empty a pool. Global
 cooldowns prevent one bot trading every sampled coin in the same tick.
 
 The **Agents** tab shows personalities, available cash, one-time grants, trade
-counts, exposure limits, and each agent's biggest buy. **Whale watch** on Discover
+counts, exposure limits, and each agent's biggest buy. **Whale watch** in the activity panel
 retains the ten latest trades of $1,000 or more; opening an item shows its coin's
 chart. Trade activity includes agent names and the rule behind their decision.
 Wealth does not imply good judgment, and disciplined rules do not guarantee a
@@ -329,7 +329,7 @@ from the repository root to check the Vite startup path and module-load failure 
 
 Trade opens `#trade`, a searchable market picker, instead of linking to a default
 FROG chart. Selecting any market opens that market's chart and USD ticket.
-Discover contains the Trending strip and Whale watch. Discover and the picker have a Trending · 5m tab and
+Discover contains a ranked screener, with Trending, Top, Gainers, and New pairs views. Whale watch opens in a separate activity panel. Discover and the picker have period controls and
 sorts for heat or recent buy USD. The API aggregates actual five-minute buy/sell
 USD, buy/sell counts, and distinct buyers across every coin, including older coins
 outside the latest launch feed. Heat is buy USD × log2(2 + distinct buyers) × the
@@ -361,11 +361,47 @@ backend. Restart both backend and frontend after updating to activate the crowd.
 ### NORX branding and focused Pulse
 
 Pulse contains the three launch-stage feeds, search, presets, and launch countdown.
-Trending and Whale watch are on Discover, where their chart navigation and
-scroll controls continue to work. NORX is uppercase with a gold X throughout the
+Trending is represented by the screener ranking on Discover. Whale watch opens
+in its own activity drawer from the header or screener controls. NORX is uppercase with a gold X throughout the
 header, welcome, and startup screen. The original DM Sans body and Manrope
 interface headings are restored, with Cormorant Garamond on the welcome page.
 Navy surfaces, gold accents, and stars are retained; buys/gains remain green and
 sells/losses red. Fonts are self-hosted under `frontend/public/fonts` with their
 SIL Open Font License files and `font-display: swap`, so no Google Fonts request
 blocks startup.
+
+### Discover screener and USD / ETH
+
+Discover uses ranked, compact rows with sortable market cap, price, age,
+transactions, volume, traders, period changes, and buy/sell flow. Trending is a
+table view, not an extra ticker above the table. The 5m/1h/6h/24h buttons select
+the actual trade window used for ranking, volume, transaction and trader counts.
+Price changes compare the current pool spot with the last execution at/before
+the window start, falling back to the first known execution for younger coins;
+unknown history shows a dash. The totals cover all markets; the table covers
+the current feed plus leading active markets from each window. Market data
+uses API version 4 so an older backend reports that it needs restarting rather
+than silently omitting the screener statistics.
+
+Whale watch is a separate panel opened from the wave icon in the header or the
+screener's Whale watch button. It shows each trade's market, time, size, and
+personality and opens that market's chart. It occupies no space above Discover
+or Pulse.
+
+The saved USD/ETH selector changes monetary displays, chart prices/volume,
+portfolio valuations, filters, and buy inputs. ETH is a **simulated quote unit**
+at a fixed paper rate of **1 ETH = $3,000**; it is not live Ethereum pricing, a
+wallet, or a blockchain transaction. The ledger, liquidity pools, grants, and
+fees remain in integer micro-USD. A 0.1 ETH buy creates a $300 USD budget before
+preview/confirmation. Token sell quantities remain whole tokens; their proceeds
+are displayed in the selected unit. Changing units never grants funds or edits
+balances. Existing preset budgets keep their USD value and display the ETH
+equivalent. New ETH ticket presets are 0.01/0.05/0.1/1 ETH.
+
+`test_screener.py` checks period boundaries, distinct traders, true volume and
+price baselines. `money.test.js` checks conversion and formatting.
+`scripts/smoke_screener.py` checks sorting/windows, the separate activity panel,
+persistence, an actual 0.1 ETH virtual buy and token sale, and five mobile routes.
+Restart both servers after updating; preserve the existing data directory.
+
+[View the Discover screener](docs/discover-preview.png).

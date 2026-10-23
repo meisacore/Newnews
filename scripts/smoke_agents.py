@@ -20,9 +20,10 @@ with sync_playwright() as p:
     comet = page.locator(".agent-card").filter(
         has=page.get_by_role("heading", name="Comet", exact=True)
     )
+    page.get_by_label("Search traders").fill("Comet")
     comet.wait_for()
     assert "Reckless whale" in comet.inner_text()
-    assert "$1,500,000 initial grant" in comet.inner_text()
+    assert "$1,500,000.00 initial grant" in comet.inner_text()
     assert page.locator(".agent-card").count() <= 40
     assert "2000" in page.locator(".agent-summary").inner_text()
     page.get_by_label("Search traders").fill("Comet")
@@ -30,9 +31,10 @@ with sync_playwright() as p:
     page.get_by_label("Search traders").fill("")
     page.screenshot(path="/tmp/norx-agent-personalities.png", full_page=True)
     page.get_by_role("link", name="Discover", exact=True).click()
+    page.get_by_role("button", name="Whale watch", exact=True).click()
     page.get_by_role("region", name="Large trades", exact=True).wait_for(timeout=60000)
     state = page.request.get(base + "/api/state").json()
-    assert state["api_version"] == 3
+    assert state["api_version"] == 4
     assert any(t["amount"] >= 1000 * 1e6 for t in state["large_trades"])
     largest = max(state["agents"], key=lambda a: a["biggest_buy"])
     first = page.locator(".whale-watch-trades button").first

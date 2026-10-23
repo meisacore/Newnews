@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useCurrency } from "./Currency";
 import { BUY_PRESETS, filterPulseRows, sortPulseRows } from "./pulseLogic";
 const compact = (n) =>
   new Intl.NumberFormat("en-US", {
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(n || 0);
-const money = (n) => "$" + compact(n);
+
 function age(created, now) {
   const n = Math.max(0, Math.floor(now - created));
   return n < 60
@@ -54,6 +55,8 @@ export default function PulseColumn({
   onOpen,
   onBuy,
 }) {
+  const currency = useCurrency();
+  const money = currency.compact;
   const [settings, setSettings] = useState(() => preferences(stage.id)),
     [showFilters, setShowFilters] = useState(false),
     [mode, setMode] = useState("auto"),
@@ -154,13 +157,13 @@ export default function PulseColumn({
               <button
                 key={value}
                 className={buy === value ? "selected" : ""}
-                aria-label={`Use ${value} USD preset for ${stage.title}`}
+                aria-label={`Use ${Number(currency.fromUsd(value).toFixed(8))} ${currency.unit} preset for ${stage.title}`}
                 aria-pressed={buy === value}
-                title={"Prepare a $" + value + " virtual USD buy"}
+                title={"Prepare a " + currency.format(value) + " virtual buy"}
                 onClick={() => setSettings((s) => ({ ...s, buy: value }))}
               >
                 P{index + 1}
-                <small>${value}</small>
+                <small>{currency.compact(value)}</small>
               </button>
             ))}
           </div>
@@ -217,18 +220,43 @@ export default function PulseColumn({
               <div className="filter-fields">
                 {fields.map(([key, label]) => (
                   <label key={key}>
-                    {label}
+                    {label.replace("USD", currency.unit)}
                     <input
                       type="number"
                       min="0"
                       step={key === "minHolders" ? "1" : "any"}
-                      aria-label={label + " for " + stage.title}
+                      aria-label={
+                        label.replace("USD", currency.unit) +
+                        " for " +
+                        stage.title
+                      }
                       placeholder="Any"
-                      value={settings.filters[key] ?? ""}
+                      value={
+                        settings.filters[key] == null ||
+                        settings.filters[key] === ""
+                          ? ""
+                          : ["minCap", "maxCap", "minVolume"].includes(key)
+                            ? Number(
+                                currency
+                                  .fromUsd(settings.filters[key])
+                                  .toFixed(8),
+                              )
+                            : settings.filters[key]
+                      }
                       onChange={(e) =>
                         setSettings((s) => ({
                           ...s,
-                          filters: { ...s.filters, [key]: e.target.value },
+                          filters: {
+                            ...s.filters,
+                            [key]:
+                              e.target.value === ""
+                                ? ""
+                                : ["minCap", "maxCap", "minVolume"].includes(
+                                      key,
+                                    )
+                                  ? currency.toUsd(e.target.value)
+                                  : e.target.value,
+                          },
                         }))
                       }
                     />
@@ -331,14 +359,14 @@ export default function PulseColumn({
               </button>
               <div className="pulse-card-foot">
                 <span>
-                  Virtual USD <i>·</i> AMM
+                  Virtual {currency.unit} <i>·</i> AMM
                 </span>
                 <button
                   disabled={busy || !Number.isFinite(buy) || buy <= 0}
-                  aria-label={`Prepare ${buy} USD buy of ${c.symbol}`}
+                  aria-label={`Prepare ${Number(currency.fromUsd(buy).toFixed(8))} ${currency.unit} buy of ${c.symbol}`}
                   onClick={() => onBuy(c.id, buy)}
                 >
-                  ϟ Buy <strong>${buy}</strong>
+                  ϟ Buy <strong>{currency.compact(buy)}</strong>
                 </button>
               </div>
             </article>

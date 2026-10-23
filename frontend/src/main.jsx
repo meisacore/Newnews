@@ -1,6 +1,7 @@
 import React, { lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { PublicApp } from "./App";
+import { CurrencyProvider } from "./Currency";
 const PrivyRoot = lazy(() => import("@norx/auth-root"));
 const id = import.meta.env.VITE_PRIVY_APP_ID;
 class StartupBoundary extends React.Component {
@@ -29,14 +30,18 @@ class StartupBoundary extends React.Component {
 }
 createRoot(document.getElementById("root")).render(
   <StartupBoundary>
-    {id ? (
-      <Suspense
-        fallback={<div className="app loading-world">Opening your world…</div>}
-      >
-        <PrivyRoot id={id} />
-      </Suspense>
-    ) : (
-      <PublicApp />
-    )}
+    <CurrencyProvider>
+      {id ? (
+        <Suspense
+          fallback={
+            <div className="app loading-world">Opening your world…</div>
+          }
+        >
+          <PrivyRoot id={id} />
+        </Suspense>
+      ) : (
+        <PublicApp />
+      )}
+    </CurrencyProvider>
   </StartupBoundary>,
 );

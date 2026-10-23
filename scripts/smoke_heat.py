@@ -14,15 +14,17 @@ with sync_playwright() as p:
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.goto(base + "/market.html#pulse")
     page.get_by_role("heading", name="Pulse", exact=True).wait_for()
-    assert page.locator(".hot-markets,.whale-watch").count() == 0
+    assert page.locator(".pulse .hot-markets,.pulse .whale-watch").count() == 0
     assert page.locator(".wordmark").inner_text() == "NORX"
     assert (
         page.locator(".wordmark > span").evaluate("el=>getComputedStyle(el).color")
         == "rgb(201, 180, 140)"
     )
     page.get_by_role("link", name="Discover", exact=True).click()
-    page.locator(".hot-market-scroll button").first.wait_for(timeout=15000)
+    page.locator(".screener-table tbody tr").first.wait_for(timeout=15000)
+    page.get_by_role("button", name="Whale watch", exact=True).click()
     page.get_by_role("region", name="Large trades", exact=True).wait_for()
+    page.get_by_role("button", name="Close whale watch", exact=True).click()
     state = page.request.get(base + "/api/state").json()
     assert len(state["agents"]) == 2000
     assert "sky-bg.jpg" in page.evaluate(
@@ -37,13 +39,16 @@ with sync_playwright() as p:
     assert page.url.endswith("#trade") and page.locator("#amount").count() == 0
     chosen = next(c for c in state["coins"] if c["id"] != "frog" and c["in_feed"])
     page.get_by_label("Search markets").fill(chosen["symbol"])
-    page.locator(".market-name").filter(has_text=chosen["symbol"]).first.click()
+    page.locator(".screener-token").filter(has_text=chosen["symbol"]).first.click()
     assert page.url.endswith("#coin/" + chosen["id"])
     page.get_by_role("heading", name="Make your move", exact=True).wait_for()
     page.get_by_role("link", name="Discover", exact=True).click()
-    page.get_by_role("button", name="Trending · 5m", exact=True).click()
-    page.locator(".terminal-table tbody tr").first.wait_for()
-    assert page.get_by_label("Sort markets").input_value() == "heat_score"
+    page.get_by_role("button", name="Trending", exact=True).click()
+    page.locator(".screener-table tbody tr").first.wait_for()
+    assert (
+        page.get_by_role("button", name="5M", exact=True).get_attribute("aria-pressed")
+        == "true"
+    )
     page.get_by_role("link", name="Agents", exact=True).click()
     page.get_by_role("button", name="Next", exact=True).click()
     assert "Page 2 of 50" in page.locator(".agent-browser").inner_text()
@@ -60,7 +65,7 @@ with sync_playwright() as p:
         page.screenshot(path="/tmp/norx-heat-" + route + "-mobile.png", full_page=True)
         page.set_viewport_size({"width": 1440, "height": 1000})
     page.goto(base + "/market.html#pulse")
-    assert page.locator(".hot-markets,.whale-watch").count() == 0
+    assert page.locator(".pulse .hot-markets,.pulse .whale-watch").count() == 0
     page.evaluate("document.fonts.ready")
     assert "DM Sans" in page.evaluate("getComputedStyle(document.body).fontFamily")
     page.screenshot(path="/tmp/norx-heat-pulse.png")

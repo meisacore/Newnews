@@ -1,7 +1,13 @@
 export function validateMarketState(data) {
   if (
-    data?.api_version !== 3 ||
+    data?.api_version !== 4 ||
     !Array.isArray(data.coins) ||
+    !Array.isArray(data.screener) ||
+    !["5m", "1h", "6h", "24h"].every(
+      (w) =>
+        Number.isFinite(data.market_totals?.[w]?.volume) &&
+        Number.isFinite(data.market_totals?.[w]?.txns),
+    ) ||
     !Number.isFinite(data.next_launch_at) ||
     !Number.isFinite(data.server_time) ||
     !data.pulse_counts ||

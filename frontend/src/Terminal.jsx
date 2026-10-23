@@ -1,140 +1,277 @@
 import React, { useState } from "react";
-const usd = (n) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: n < 1 ? 5 : 2,
-  }).format(n || 0);
-export function Discover({ state, onOpen, onBuy, busy }) {
+import { Flame, TrendingUp, Sprout, BarChart3, Waves } from "lucide-react";
+import { useCurrency } from "./Currency";
+const WINDOWS = ["5m", "1h", "6h", "24h"];
+function age(ts, now) {
+  const seconds = Math.max(0, now - ts);
+  return seconds < 60
+    ? Math.floor(seconds) + "s"
+    : seconds < 3600
+      ? Math.floor(seconds / 60) + "m"
+      : seconds < 86400
+        ? Math.floor(seconds / 3600) + "h"
+        : Math.floor(seconds / 86400) + "d";
+}
+function Percent({ value }) {
+  return (
+    <span className={value == null ? "muted" : value >= 0 ? "up" : "down"}>
+      {value == null ? "—" : (value >= 0 ? "+" : "") + value.toFixed(2) + "%"}
+    </span>
+  );
+}
+export function Discover({
+  state,
+  onOpen,
+  onBuy,
+  busy,
+  picker = false,
+  onWhales,
+}) {
+  const money = useCurrency();
   const [query, setQuery] = useState(""),
-    [sort, setSort] = useState("volume_24h"),
-    [stage, setStage] = useState("all");
-  const rows = (
-    stage === "trending" ? state?.trending || [] : state?.coins || []
-  )
+    [mode, setMode] = useState(picker ? "all" : "trending"),
+    [window, setWindow] = useState("5m"),
+    [sort, setSort] = useState(picker ? "volume" : "heat"),
+    [desc, setDesc] = useState(true);
+  const data = state?.screener || state?.coins || [];
+  const metric = (c) => c.windows?.[window] || {};
+  const numeric = (c, key) =>
+    key === "market_cap" ||
+    key === "price" ||
+    key === "created_at" ||
+    key === "holders"
+      ? c[key]
+      : key.startsWith("change_")
+        ? c.windows?.[key.slice(7)]?.change
+        : metric(c)[key];
+  const rows = data
     .filter(
       (c) =>
-        (stage === "trending" || c.in_feed !== false) &&
-        (stage === "all" || stage === "trending" || c.stage === stage) &&
-        (c.name + " " + c.symbol).toLowerCase().includes(query.toLowerCase()),
+        (c.name + " " + c.symbol + " " + c.id)
+          .toLowerCase()
+          .includes(query.toLowerCase()) &&
+        (mode !== "new" || c.stage === "new") &&
+        (mode !== "established" || c.stage === "migrated") &&
+        (mode !== "trending" || (metric(c).heat || 0) > 0),
     )
-    .sort((a, b) => (b[sort] || 0) - (a[sort] || 0));
+    .sort(
+      (a, b) =>
+        (desc ? -1 : 1) *
+        ((numeric(a, sort) ?? -Infinity) - (numeric(b, sort) ?? -Infinity)),
+    );
+  function choose(id) {
+    setMode(id);
+    setDesc(true);
+    setSort(
+      id === "trending"
+        ? "heat"
+        : id === "gainers"
+          ? "change"
+          : id === "top"
+            ? "market_cap"
+            : id === "new"
+              ? "created_at"
+              : "volume",
+    );
+  }
+  function sortBy(key) {
+    if (sort === key) setDesc(!desc);
+    else {
+      setSort(key);
+      setDesc(true);
+    }
+  }
+  const total = state?.market_totals?.[window];
+  const headers = [
+    ["Token", null],
+    ["Mcap", "market_cap"],
+    ["Price", "price"],
+    ["Age", "created_at"],
+    ["Txns", "txns"],
+    ["Volume", "volume"],
+    ["Traders", "traders"],
+    ["5m", "change_5m"],
+    ["1h", "change_1h"],
+    ["6h", "change_6h"],
+    ["24h", "change_24h"],
+    ["Buy / sell", null],
+    ["Trade", null],
+  ];
   return (
-    <section className="terminal-panel">
-      <div className="table-toolbar">
-        <div className="tabs">
+    <section className="screener" aria-label="Market screener">
+      <div className="screener-stats">
+        <div>
+          <span>{window.toUpperCase()} VOLUME</span>
+          <b>{total ? money.compact(total.volume) : "—"}</b>
+        </div>
+        <div>
+          <span>{window.toUpperCase()} TRANSACTIONS</span>
+          <b>{total ? total.txns.toLocaleString() : "—"}</b>
+        </div>
+        <div>
+          <span>MARKETS</span>
+          <b>{state?.total_coins?.toLocaleString() ?? "—"}</b>
+        </div>
+      </div>
+      <div className="screener-controls">
+        <div className="screener-modes">
           {[
-            ["all", "All markets"],
-            ["trending", "Trending · 5m"],
-            ["new", "New launches"],
-            ["migrated", "Established"],
-          ].map(([id, label]) => (
+            ["trending", "Trending", Flame],
+            ["top", "Top", BarChart3],
+            ["gainers", "Gainers", TrendingUp],
+            ["new", "New pairs", Sprout],
+            ["all", "All markets", null],
+            ["established", "Established", null],
+          ].map(([id, label, Icon]) => (
             <button
               key={id}
-              className={stage === id ? "active" : ""}
-              onClick={() => {
-                setStage(id);
-                setSort(id === "trending" ? "heat_score" : "volume_24h");
-              }}
+              className={mode === id ? "active" : ""}
+              onClick={() => choose(id)}
             >
-              {label}
+              {Icon && <Icon size={13} />}
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+        <div
+          className="screener-windows"
+          role="group"
+          aria-label="Activity window"
+        >
+          {WINDOWS.map((w) => (
+            <button
+              key={w}
+              aria-pressed={w === window}
+              onClick={() => setWindow(w)}
+            >
+              {w.toUpperCase()}
             </button>
           ))}
         </div>
         <input
           aria-label="Search markets"
-          placeholder="Search name or symbol…"
+          placeholder="Search token or symbol…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <select
-          aria-label="Sort markets"
-          value={sort}
-          onChange={(e) => setSort(e.target.value)}
-        >
-          <option value="heat_score">Hottest buys · 5m</option>
-          <option value="buy_usd_5m">Most buy USD · 5m</option>
-          <option value="volume_24h">Highest volume</option>
-          <option value="change_24h">Top gainers</option>
-          <option value="market_cap">Market cap</option>
-          <option value="created_at">Newest</option>
-        </select>
+        <button className="screener-whales" onClick={onWhales}>
+          <Waves size={14} />
+          Whale watch
+        </button>
       </div>
-      <div className="table-scroll">
-        <table className="terminal-table">
+      <div className="screener-table-wrap">
+        <table className="screener-table">
           <thead>
             <tr>
-              <th>Market / USD</th>
-              <th>Price</th>
-              <th>24h change</th>
-              <th>Buys · 5m</th>
-              <th>Buyers · 5m</th>
-              <th>Market cap</th>
-              <th>24h volume</th>
-              <th>Pool USD</th>
-              <th>Holders</th>
-              <th>Trade</th>
+              {headers.map(([label, key]) => (
+                <th key={label}>
+                  {key ? (
+                    <button
+                      aria-label={"Sort by " + label}
+                      onClick={() => sortBy(key)}
+                    >
+                      {label}
+                      {sort === key ? <span>{desc ? " ↓" : " ↑"}</span> : null}
+                    </button>
+                  ) : (
+                    label
+                  )}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map((c) => (
-              <tr key={c.id}>
-                <td>
-                  <button className="market-name" onClick={() => onOpen(c.id)}>
-                    <span className="market-avatar">
-                      {c.symbol.slice(0, 2)}
-                    </span>
-                    <span>
-                      <b>{c.name}</b>
-                      <small>{c.symbol}</small>
-                    </span>
-                  </button>
-                </td>
-                <td>{usd(c.price)}</td>
-                <td className={c.change_24h >= 0 ? "up" : "down"}>
-                  {c.change_24h >= 0 ? "+" : ""}
-                  {c.change_24h.toFixed(2)}%
-                </td>
-                <td className="up">
-                  {usd(c.buy_usd_5m)}
-                  <small className="table-net">
-                    Net {usd((c.buy_usd_5m || 0) - (c.sell_usd_5m || 0))}
-                  </small>
-                </td>
-                <td>{c.buyers_5m || 0}</td>
-                <td>{usd(c.market_cap)}</td>
-                <td>{usd(c.volume_24h)}</td>
-                <td>{usd(c.pool_usd)}</td>
-                <td>{c.holders}</td>
-                <td>
-                  <button
-                    disabled={busy}
-                    className="table-buy"
-                    onClick={() => onBuy(c.id, 50)}
-                  >
-                    Buy $50
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {rows.map((c, i) => {
+              const m = metric(c);
+              const flow = (m.buy_usd || 0) + (m.sell_usd || 0);
+              return (
+                <tr key={c.id}>
+                  <td>
+                    <button
+                      className="screener-token"
+                      onClick={() => onOpen(c.id)}
+                    >
+                      <span className="screener-rank">#{i + 1}</span>
+                      <span className="market-avatar">
+                        {c.symbol.slice(0, 2)}
+                      </span>
+                      <span>
+                        <b>{c.symbol}</b>
+                        <em> / {money.unit}</em>
+                        <small>{c.name}</small>
+                      </span>
+                    </button>
+                  </td>
+                  <td className="screener-cap">
+                    {money.compact(c.market_cap)}
+                  </td>
+                  <td>{money.format(c.price)}</td>
+                  <td className="screener-age">
+                    {age(c.created_at, state?.server_time || Date.now() / 1000)}
+                  </td>
+                  <td>{m.txns?.toLocaleString() ?? "—"}</td>
+                  <td>{m.volume == null ? "—" : money.compact(m.volume)}</td>
+                  <td>{m.traders?.toLocaleString() ?? "—"}</td>
+                  {WINDOWS.map((w) => (
+                    <td key={w}>
+                      <Percent value={c.windows?.[w]?.change} />
+                    </td>
+                  ))}
+                  <td>
+                    <div className="screener-flow">
+                      <span className="up">{m.buys ?? 0}</span>
+                      <span className="down">{m.sells ?? 0}</span>
+                    </div>
+                    <div className="screener-flow-bar">
+                      <i
+                        style={{
+                          width:
+                            (flow ? ((m.buy_usd || 0) / flow) * 100 : 50) + "%",
+                        }}
+                      />
+                    </div>
+                  </td>
+                  <td>
+                    <button
+                      className="table-buy"
+                      disabled={busy}
+                      onClick={() => onBuy(c.id, 50)}
+                    >
+                      Buy {money.compact(50)}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
+        {!rows.length && (
+          <p className="empty-market">
+            {state
+              ? mode === "trending"
+                ? "No buying activity in this window yet. Explore All markets."
+                : "No markets match your filters."
+              : "Connecting to the market…"}
+          </p>
+        )}
       </div>
-      {!rows.length && (
-        <p className="empty-market">
-          {state
-            ? "No markets match your search."
-            : "Connecting to the market…"}
-        </p>
-      )}
-      <div className="table-caption">
-        {rows.length} markets · Trending ranks five-minute buy USD, distinct
-        buyers and buy/sell trade share. Select a market to open its chart
+      <div className="screener-caption">
+        <span>
+          {rows.length} markets in the current feed · Live simulated trades ·
+          Select a token to open its chart
+        </span>
+        <span>
+          {money.unit === "ETH"
+            ? `Simulated ETH · 1 ETH = $${money.rate.toLocaleString()}`
+            : "Virtual USD"}
+        </span>
       </div>
     </section>
   );
 }
 export function Activity({ state, selected, me }) {
+  const money = useCurrency();
+  const usd = money.format;
   const [tab, setTab] = useState("trades"),
     [side, setSide] = useState("all");
   const trades = (
@@ -176,7 +313,7 @@ export function Activity({ state, selected, me }) {
             <tr>
               <th>Time</th>
               <th>Side</th>
-              <th>USD</th>
+              <th>{money.unit}</th>
               <th>Tokens</th>
               <th>Trader</th>
               <th>Strategy</th>

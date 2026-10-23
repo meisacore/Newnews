@@ -21,11 +21,12 @@ with sync_playwright() as p:
     search.get_by_role("button", name="Moon Frog FROG").wait_for()
     page.keyboard.press("Escape")
     assert not search.is_visible()
+    page.get_by_role("button", name="All markets", exact=True).click()
     page.get_by_label("Search markets").fill("FROG")
-    row = page.locator("tbody tr")
+    row = page.locator(".screener-table tbody tr")
     assert row.count() == 1
-    page.get_by_label("Sort markets").select_option("market_cap")
-    page.get_by_role("button", name="Moon Frog FROG").click()
+    page.get_by_role("button", name="Sort by Mcap", exact=True).click()
+    page.locator(".screener-token").filter(has_text="FROG").first.click()
     page.get_by_role("button", name="Enter local test account").first.click()
     page.get_by_role("button", name="$250", exact=True).click()
     assert page.locator("#amount").input_value() == "250"

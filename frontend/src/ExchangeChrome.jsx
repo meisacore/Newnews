@@ -1,13 +1,19 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Search, UserRound, ArrowUpRight, X, Command } from "lucide-react";
 import { simulationDisplay } from "./marketState";
-export const usd = (n) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: n < 1 ? 5 : 2,
-  }).format(n || 0);
-export function ExchangeHeader({ state, me, auth, route, selected, onOpen }) {
+import { useCurrency } from "./Currency";
+import { Waves } from "lucide-react";
+export function ExchangeHeader({
+  state,
+  me,
+  auth,
+  route,
+  selected,
+  onOpen,
+  onWhales,
+}) {
+  const money = useCurrency();
+  const usd = money.format;
   const [search, setSearch] = useState(false),
     [query, setQuery] = useState("");
   const dialog = useRef(null),
@@ -93,9 +99,30 @@ export function ExchangeHeader({ state, me, auth, route, selected, onOpen }) {
           <span>Search coins or symbol</span>
           <kbd>/</kbd>
         </button>
-        <span className="currency-pill">
-          USD <small>Paper</small>
-        </span>
+        <div
+          className="currency-switch"
+          role="group"
+          aria-label="Quote currency"
+          title={`Simulated rate: 1 ETH = $${money.rate.toLocaleString()}. No real ETH.`}
+        >
+          {["USD", "ETH"].map((value) => (
+            <button
+              key={value}
+              aria-pressed={money.unit === value}
+              onClick={() => money.setUnit(value)}
+            >
+              {value}
+            </button>
+          ))}
+        </div>
+        <button
+          className="whale-trigger"
+          aria-label="Open whale watch"
+          title="Whale watch"
+          onClick={onWhales}
+        >
+          <Waves size={17} />
+        </button>
         <a
           href="#portfolio"
           className="equity-chip"
@@ -109,7 +136,7 @@ export function ExchangeHeader({ state, me, auth, route, selected, onOpen }) {
             <>
               <span className="account-cash">
                 {me ? usd(me.cash) : "Loading…"}
-                <small>virtual USD</small>
+                <small>virtual {money.unit}</small>
               </span>
               <button onClick={() => auth.logout()}>
                 <UserRound size={14} />
@@ -186,6 +213,7 @@ export function ExchangeHeader({ state, me, auth, route, selected, onOpen }) {
   );
 }
 export function ExchangeFooter({ state, feedError }) {
+  const money = useCurrency();
   const health = simulationDisplay(state?.simulation);
   return (
     <footer className="exchange-footer">
@@ -203,7 +231,7 @@ export function ExchangeFooter({ state, feedError }) {
         {state?.condition || "Connecting"} economy
       </span>
       <span className="footer-disclaimer">
-        Paper trading · Virtual USD · No real funds
+        Paper trading · Virtual {money.unit} · No real funds
       </span>
       <a href="/">
         NORX <ArrowUpRight size={11} />
@@ -212,6 +240,8 @@ export function ExchangeFooter({ state, feedError }) {
   );
 }
 export function Portfolio({ me, state, auth, onOpen }) {
+  const money = useCurrency();
+  const usd = money.format;
   const positions = (me?.positions || []).map((p) => ({
     ...p,
     price: state?.coins.find((c) => c.id === p.id)?.price ?? p.price,
@@ -222,7 +252,7 @@ export function Portfolio({ me, state, auth, onOpen }) {
       <div className="portfolio-summary">
         {[
           ["Account equity", me ? usd(me.cash + value) : "—"],
-          ["Available USD", me ? usd(me.cash) : "—"],
+          ["Available " + money.unit, me ? usd(me.cash) : "—"],
           ["Holdings value", me ? usd(value) : "—"],
           ["Open positions", me ? positions.length : "—"],
         ].map(([label, v]) => (
@@ -331,7 +361,7 @@ export function Portfolio({ me, state, auth, onOpen }) {
                   <th>Token</th>
                   <th>Side</th>
                   <th>Quantity</th>
-                  <th>USD</th>
+                  <th>{money.unit}</th>
                 </tr>
               </thead>
               <tbody>

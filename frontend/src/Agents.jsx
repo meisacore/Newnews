@@ -1,11 +1,8 @@
 import React, { useState } from "react";
-const usd = (n) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format((n || 0) / 1e6);
+import { useCurrency } from "./Currency";
 export default function Agents({ state }) {
+  const money = useCurrency();
+  const usd = (n) => money.format((n || 0) / 1e6);
   const [query, setQuery] = useState(""),
     [page, setPage] = useState(0);
   const population = [...(state?.agents || [])].sort((a, b) => b.cash - a.cash);
@@ -25,7 +22,7 @@ export default function Agents({ state }) {
           <strong>{population.length}</strong>
         </div>
         <div>
-          <small>AVAILABLE AGENT USD</small>
+          <small>AVAILABLE AGENT {money.unit}</small>
           <strong>{usd(population.reduce((sum, a) => sum + a.cash, 0))}</strong>
         </div>
         <div>
@@ -38,8 +35,8 @@ export default function Agents({ state }) {
       <p className="muted">
         Wealth and judgment vary. Patient investors check perceived value and
         execution costs. Gamblers and reckless whales can chase hype, overpay,
-        change their minds, and lose virtual USD. No strategy is guaranteed to
-        win.
+        change their minds, and lose virtual {money.unit}. No strategy is
+        guaranteed to win.
       </p>
       <div className="agent-browser">
         <input
@@ -83,7 +80,7 @@ export default function Agents({ state }) {
               </span>
             </div>
             <strong className="agent-cash">
-              {usd(a.cash)} <small>available virtual USD</small>
+              {usd(a.cash)} <small>available virtual {money.unit}</small>
             </strong>
             <div className="agent-facts">
               <div>

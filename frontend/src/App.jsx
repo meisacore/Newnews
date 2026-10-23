@@ -7,19 +7,13 @@ import {
 import "./style.css";
 import Pulse from "./Pulse";
 import Agents from "./Agents";
-import HotMarkets from "./HotMarkets";
-import WhaleWatch from "./WhaleWatch";
+import ActivityDrawer from "./ActivityDrawer";
+import { useCurrency } from "./Currency";
 import { Discover, Activity } from "./Terminal";
 import { ExchangeHeader, ExchangeFooter, Portfolio } from "./ExchangeChrome";
 import "./terminal.css";
 import { validateMarketState } from "./marketState";
 
-const dollars = (n) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: n < 1 ? 5 : 2,
-  }).format(n || 0);
 async function api(path, token, body, signal) {
   const r = await fetch("/api/" + path, {
     cache: "no-store",
@@ -45,6 +39,7 @@ async function api(path, token, body, signal) {
   return data;
 }
 function Chart({ coin, interval, refresh }) {
+  const money = useCurrency();
   const el = useRef();
   const chart = useRef();
   const series = useRef();
@@ -91,11 +86,26 @@ function Chart({ coin, interval, refresh }) {
         if (cancelled) return;
         setError("");
         setEmpty(!data.length);
-        series.current.setData(data);
+        series.current.applyOptions({
+          priceFormat: {
+            type: "price",
+            precision: money.unit === "ETH" ? 8 : 6,
+            minMove: money.unit === "ETH" ? 0.00000001 : 0.000001,
+          },
+        });
+        series.current.setData(
+          data.map((x) => ({
+            ...x,
+            open: money.fromUsd(x.open),
+            high: money.fromUsd(x.high),
+            low: money.fromUsd(x.low),
+            close: money.fromUsd(x.close),
+          })),
+        );
         volume.current.setData(
           data.map((x) => ({
             time: x.time,
-            value: x.volume,
+            value: money.fromUsd(x.volume),
             color: x.close >= x.open ? "#6ad2ac55" : "#ee879355",
           })),
         );
@@ -110,7 +120,7 @@ function Chart({ coin, interval, refresh }) {
     return () => {
       cancelled = true;
     };
-  }, [coin, interval, refresh]);
+  }, [coin, interval, refresh, money.unit]);
   return (
     <>
       <div ref={el} />
@@ -135,6 +145,10 @@ function readRoute() {
   };
 }
 export function App({ auth }) {
+  const money = useCurrency();
+  const dollars = money.format;
+  const [whales, setWhales] = useState(false);
+  const previousUnit = useRef(money.unit);
   const [route, setRoute] = useState(readRoute),
     [state, setState] = useState(null),
     [feedError, setFeedError] = useState(""),
@@ -142,7 +156,7 @@ export function App({ auth }) {
     [selected, setSelected] = useState(() => readRoute().coin || ""),
     [interval, setIntervalValue] = useState(60),
     [side, setSide] = useState("buy"),
-    [amount, setAmount] = useState("50"),
+    [amount, setAmount] = useState(() => String(money.fromUsd(50))),
     [quote, setQuote] = useState(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -220,7 +234,7 @@ export function App({ auth }) {
   }
   function prepareBuy(id, value) {
     setSide("buy");
-    setAmount(String(value));
+    setAmount(String(money.fromUsd(value)));
     openCoin(id);
     if (!auth.authenticated) auth.login();
   }
@@ -249,6 +263,23 @@ export function App({ auth }) {
   useEffect(() => {
     setNotice("");
   }, [route.view]);
+  useEffect(() => {
+    if (previousUnit.current !== money.unit) {
+      if (side === "buy")
+        setAmount((value) =>
+          String(
+            Number(
+              (money.unit === "ETH"
+                ? Number(value) / money.rate
+                : Number(value) * money.rate
+              ).toFixed(8),
+            ),
+          ),
+        );
+      previousUnit.current = money.unit;
+      setQuote(null);
+    }
+  }, [money.unit]);
   const coin = state?.coins.find((c) => c.id === selected);
   async function action() {
     setBusy(true);
@@ -266,7 +297,9 @@ export function App({ auth }) {
         const data = await api("quote", token, {
           coin: selected,
           side,
-          ...(side === "buy" ? { budget: Math.round(n * 1e6) } : { qty: n }),
+          ...(side === "buy"
+            ? { budget: Math.round(money.toUsd(n) * 1e6) }
+            : { qty: n }),
         });
         if (version === session.current) setQuote(data);
       } else {
@@ -300,6 +333,14 @@ export function App({ auth }) {
         route={route}
         selected={selected}
         onOpen={openCoin}
+        onWhales={() => setWhales(true)}
+      />
+      <ActivityDrawer
+        open={whales}
+        onClose={() => setWhales(false)}
+        state={state}
+        busy={busy}
+        onOpen={openCoin}
       />
       {route.view !== "pulse" && (
         <section className="intro">
@@ -317,7 +358,8 @@ export function App({ auth }) {
                       : "Discover"}
             </h1>
             <p className="muted">
-              Your edge starts here. Trade the simulated market in virtual USD.
+              Your edge starts here. Trade the simulated market in virtual{" "}
+              {money.unit}.
             </p>
           </div>
           <div className="condition">
@@ -362,14 +404,8 @@ export function App({ auth }) {
       )}
       {route.view === "trade" && (
         <p className="market-picker-note">
-          Choose a coin below to open its chart and USD trade ticket.
+          Choose a coin below to open its chart and {money.unit} trade ticket.
         </p>
-      )}
-      {route.view === "discover" && (
-        <section className="discover-overview" aria-label="Market activity">
-          <HotMarkets state={state} onOpen={openCoin} />
-          <WhaleWatch state={state} onOpen={openCoin} busy={busy} />
-        </section>
       )}
       {(route.view === "discover" || route.view === "trade") && (
         <Discover
@@ -377,6 +413,8 @@ export function App({ auth }) {
           onOpen={openCoin}
           onBuy={prepareBuy}
           busy={busy}
+          picker={route.view === "trade"}
+          onWhales={() => setWhales(true)}
         />
       )}
       {route.view === "coin" && coin && (
@@ -385,7 +423,10 @@ export function App({ auth }) {
             <div className="chart-heading">
               <div>
                 <h2>
-                  {coin.name} <small>{coin.symbol}/USD</small>
+                  {coin.name}{" "}
+                  <small>
+                    {coin.symbol}/{money.unit}
+                  </small>
                 </h2>
                 <strong className="price">{dollars(coin.price)}</strong>
               </div>
@@ -413,7 +454,7 @@ export function App({ auth }) {
                 </b>
               </span>
               <span>
-                Pool USD <b>{dollars(coin.pool_usd)}</b>
+                Pool {money.unit} <b>{dollars(coin.pool_usd)}</b>
               </span>
               <span>
                 Holders <b>{coin.holders}</b>
@@ -437,9 +478,9 @@ export function App({ auth }) {
               </div>
             </div>
             <p className="muted fine">
-              Candles show fee-exclusive trade prices and USD volume. The
-              current price is the pool spot price. Market cap is a valuation,
-              not cash invested.
+              Candles show fee-exclusive trade prices and {money.unit} volume.
+              The current price is the pool spot price. Market cap is a
+              valuation, not cash invested.
             </p>
             <Activity state={state} selected={selected} me={me} />
           </section>
@@ -458,47 +499,74 @@ export function App({ auth }) {
               ))}
             </div>
             <label htmlFor="amount">
-              {side === "buy" ? "Spend virtual USD" : "Tokens to sell"}
+              {side === "buy"
+                ? "Spend virtual " + money.unit
+                : "Tokens to sell"}
             </label>
             <div className="input">
-              <span>{side === "buy" ? "$" : coin.symbol}</span>
+              <span>{side === "buy" ? money.unit : coin.symbol}</span>
               <input
                 id="amount"
                 disabled={busy}
                 type="number"
-                min={side === "buy" ? ".01" : "1"}
-                step={side === "buy" ? ".01" : "1"}
+                min={
+                  side === "buy"
+                    ? money.unit === "ETH"
+                      ? ".00000001"
+                      : ".01"
+                    : "1"
+                }
+                step={
+                  side === "buy"
+                    ? money.unit === "ETH"
+                      ? ".00000001"
+                      : ".01"
+                    : "1"
+                }
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
               />
             </div>
+            {money.unit === "ETH" && (
+              <p className="muted fine">
+                Simulated rate: 1 ETH = ${money.rate.toLocaleString()}. No real
+                ETH.
+              </p>
+            )}
             <p className="muted">
               Held: {(me?.holdings[selected] || 0).toLocaleString()}{" "}
               {coin.symbol}
             </p>
             <div className="ticket-presets">
-              {(side === "buy" ? [25, 50, 250, 1000] : [25, 50, 75, 100]).map(
-                (n) => (
-                  <button
-                    key={n}
-                    disabled={busy}
-                    onClick={() => {
-                      setAmount(
-                        String(
-                          side === "buy"
-                            ? n
-                            : Math.floor(
-                                ((me?.holdings[selected] || 0) * n) / 100,
-                              ),
-                        ),
-                      );
-                      setQuote(null);
-                    }}
-                  >
-                    {side === "buy" ? "$" + n : n + "%"}
-                  </button>
-                ),
-              )}
+              {(side === "buy"
+                ? money.unit === "ETH"
+                  ? [0.01, 0.05, 0.1, 1]
+                  : [25, 50, 250, 1000]
+                : [25, 50, 75, 100]
+              ).map((n) => (
+                <button
+                  key={n}
+                  disabled={busy}
+                  onClick={() => {
+                    setAmount(
+                      String(
+                        side === "buy"
+                          ? n
+                          : Math.floor(
+                              ((me?.holdings[selected] || 0) * n) / 100,
+                            ),
+                      ),
+                    );
+                    setQuote(null);
+                  }}
+                >
+                  {side === "buy"
+                    ? money.unit === "ETH"
+                      ? n + " ETH"
+                      : "$" + n
+                    : n + "%"}
+                </button>
+              ))}
             </div>
             {quote && (
               <div className="quote">
@@ -545,13 +613,13 @@ export function App({ auth }) {
                 <b>{dollars((me?.holdings[selected] || 0) * coin.price)}</b>
               </div>
               <div>
-                <span>Available USD</span>
+                <span>Available {money.unit}</span>
                 <b>{me ? dollars(me.cash) : "—"}</b>
               </div>
             </div>
             <p className="muted fine">
-              New accounts receive $10,000 virtual USD once. Your portfolio is
-              saved when you leave.
+              New accounts receive {money.format(10000)} in virtual funds once.
+              Your portfolio is saved when you leave.
             </p>
           </aside>
         </main>

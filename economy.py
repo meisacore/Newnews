@@ -626,30 +626,47 @@ class Market:
             """,
                 (now - 86400, now - 86400),
             ).fetchall()
-            recent = {}
-            for r in db.execute(
-                """SELECT coin,
-                SUM(CASE WHEN side='buy' THEN amount ELSE 0 END) AS buys,
-                SUM(CASE WHEN side='sell' THEN amount ELSE 0 END) AS sells,
-                SUM(side='buy') AS buy_count,SUM(side='sell') AS sell_count,
-                COUNT(DISTINCT CASE WHEN side='buy' THEN account END) AS buyers
-                FROM trades WHERE ts>=? AND ts<=? GROUP BY coin""",
-                (now - 300, now),
+            window_stats = {}
+            market_totals = {}
+            hot_ids = set()
+            for label, seconds in (
+                ("5m", 300),
+                ("1h", 3600),
+                ("6h", 21600),
+                ("24h", 86400),
             ):
-                value = dict(r)
-                value["score"] = (
-                    value["buys"]
-                    / UNIT
-                    * math.log2(2 + value["buyers"])
-                    * value["buy_count"]
-                    / max(1, value["buy_count"] + value["sell_count"])
+                stats = {}
+                for row in db.execute(
+                    """SELECT coin,
+                    SUM(CASE WHEN side='buy' THEN amount ELSE 0 END) AS buys,
+                    SUM(CASE WHEN side='sell' THEN amount ELSE 0 END) AS sells,
+                    SUM(side='buy') AS buy_count,SUM(side='sell') AS sell_count,
+                    COUNT(DISTINCT CASE WHEN side='buy' THEN account END) AS buyers,
+                    COUNT(DISTINCT account) AS traders,COUNT(*) AS txns,SUM(amount) AS volume
+                    FROM trades WHERE ts>=? AND ts<=? GROUP BY coin""",
+                    (now - seconds, now),
+                ):
+                    value = dict(row)
+                    value["score"] = (
+                        value["buys"]
+                        / UNIT
+                        * math.log2(2 + value["buyers"])
+                        * value["buy_count"]
+                        / max(1, value["txns"])
+                    )
+                    stats[row["coin"]] = value
+                window_stats[label] = stats
+                market_totals[label] = {
+                    "volume": sum(v["volume"] for v in stats.values()) / UNIT,
+                    "txns": sum(v["txns"] for v in stats.values()),
+                }
+                hot_ids.update(
+                    sorted(stats, key=lambda c: stats[c]["score"], reverse=True)[:60]
                 )
-                recent[r["coin"]] = value
-            hot_ids = set(
-                sorted(recent, key=lambda c: recent[c]["score"], reverse=True)[:10]
-            )
+            recent = window_stats["5m"]
             coins = []
             hot_coins = []
+            screener = []
             counts = {"new": 0, "stretch": 0, "migrated": 0}
             for r in rows:
                 p = r["cash"] / r["tokens"] / UNIT
@@ -695,6 +712,39 @@ class Market:
                     "sells_5m": recent.get(r["id"], {}).get("sell_count", 0),
                     "heat_score": recent.get(r["id"], {}).get("score", 0),
                 }
+                value["windows"] = {}
+                for label, seconds in (
+                    ("5m", 300),
+                    ("1h", 3600),
+                    ("6h", 21600),
+                    ("24h", 86400),
+                ):
+                    stats = window_stats[label].get(r["id"], {})
+                    baseline = db.execute(
+                        "SELECT price FROM trades WHERE coin=? AND ts<=? ORDER BY ts DESC,id DESC LIMIT 1",
+                        (r["id"], now - seconds),
+                    ).fetchone()
+                    if not baseline:
+                        baseline = db.execute(
+                            "SELECT price FROM trades WHERE coin=? AND ts>? AND ts<=? ORDER BY ts,id LIMIT 1",
+                            (r["id"], now - seconds, now),
+                        ).fetchone()
+                    value["windows"][label] = {
+                        "volume": stats.get("volume", 0) / UNIT,
+                        "txns": stats.get("txns", 0),
+                        "traders": stats.get("traders", 0),
+                        "buy_usd": stats.get("buys", 0) / UNIT,
+                        "sell_usd": stats.get("sells", 0) / UNIT,
+                        "buyers": stats.get("buyers", 0),
+                        "buys": stats.get("buy_count", 0),
+                        "sells": stats.get("sell_count", 0),
+                        "heat": stats.get("score", 0),
+                        "change": (p / baseline[0] - 1) * 100
+                        if baseline and baseline[0]
+                        else None,
+                    }
+                if value["in_feed"] or value["id"] in hot_ids:
+                    screener.append(value)
                 if value["in_feed"] or value["id"] == selected:
                     coins.append(value)
                 if value["id"] in hot_ids:
@@ -757,7 +807,7 @@ class Market:
             last_tick = int(heartbeat[0]) if heartbeat else None
             observed_at = int(time.time())
             return {
-                "api_version": 3,
+                "api_version": 4,
                 "simulation": simulation_status(last_tick, observed_at),
                 "coins": coins,
                 "trades": trades,
@@ -777,6 +827,8 @@ class Market:
                     reverse=True,
                 )[:10],
                 "trending_window_seconds": 300,
+                "screener": screener,
+                "market_totals": market_totals,
                 "agents": agents,
                 "condition": db.execute(
                     "SELECT value FROM meta WHERE key='condition'"

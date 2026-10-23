@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { simulationDisplay } from "./marketState";
 import PulseColumn from "./PulseColumn";
+import { useCurrency } from "./Currency";
 
 const stages = [
   {
@@ -23,6 +24,7 @@ const stages = [
   },
 ];
 export default function Pulse({ state, feedError, busy, onOpen, onBuy }) {
+  const money = useCurrency();
   const [query, setQuery] = useState(""),
     [quick, setQuick] = useState("50"),
     [tab, setTab] = useState("new"),
@@ -64,16 +66,16 @@ export default function Pulse({ state, feedError, busy, onOpen, onBuy }) {
             onChange={(e) => setQuery(e.target.value)}
           />
           <label className="quick-label">
-            Quick buy <span>$</span>
+            Quick buy <span>{money.unit === "USD" ? "$" : "Ξ"}</span>
             <input
-              aria-label="Quick buy USD amount"
+              aria-label={"Quick buy " + money.unit + " amount"}
               type="number"
-              min="0.01"
-              step="0.01"
-              value={quick}
-              onChange={(e) => setQuick(e.target.value)}
+              min={money.unit === "ETH" ? "0.00000001" : "0.01"}
+              step="any"
+              value={Number(money.fromUsd(quick).toFixed(8))}
+              onChange={(e) => setQuick(String(money.toUsd(e.target.value)))}
             />
-            <span>USD</span>
+            <span>{money.unit}</span>
           </label>
         </div>
       </div>
@@ -129,7 +131,7 @@ export default function Pulse({ state, feedError, busy, onOpen, onBuy }) {
       </div>
       <div className="pulse-footnote">
         <span>SIMULATED MARKET · {state?.total_coins || 0} coins launched</span>
-        <span>USD balances · No real funds</span>
+        <span>{money.unit} balances · No real funds</span>
       </div>
     </section>
   );

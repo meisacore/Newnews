@@ -1,11 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
-const money = (n) =>
-  "$" +
-  new Intl.NumberFormat("en-US", {
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(n || 0);
+import { useCurrency } from "./Currency";
 export default function WhaleWatch({ state, busy, onOpen }) {
+  const currency = useCurrency();
+  const money = currency.compact;
   const watchRef = useRef(null);
   const [watchEdges, setWatchEdges] = useState({ left: false, right: false });
   useEffect(() => {
@@ -38,7 +35,7 @@ export default function WhaleWatch({ state, busy, onOpen }) {
     <section className="whale-watch" aria-label="Large trades">
       <div className="whale-watch-title">
         <strong>Whale watch</strong>
-        <small>Recent trades $1k+</small>
+        <small>Recent trades {currency.compact(1000)}+</small>
       </div>
       <div
         className="whale-watch-trades"
@@ -56,6 +53,12 @@ export default function WhaleWatch({ state, busy, onOpen }) {
             <span className={t.side === "buy" ? "up" : "down"}>
               {t.side.toUpperCase()} {money(t.amount / 1e6)}
             </span>
+            <small className="whale-market">
+              {state?.screener?.find((c) => c.id === t.coin)?.symbol ||
+                state?.coins?.find((c) => c.id === t.coin)?.symbol ||
+                t.coin}{" "}
+              · {new Date(t.ts * 1000).toLocaleTimeString()}
+            </small>
             <small>
               {t.agent_name || "Player"} · {t.persona || "Player trade"}
             </small>

@@ -130,8 +130,9 @@ with sync_playwright() as p:
     page.locator(".feed-status").filter(has_text="Live simulation").wait_for(
         timeout=10000
     )
-    assert page.locator(".whale-watch-trades,.hot-markets").count() == 0
+    assert page.locator(".pulse .whale-watch-trades,.pulse .hot-markets").count() == 0
     page.get_by_role("link", name="Discover", exact=True).click()
+    page.get_by_role("button", name="Whale watch", exact=True).click()
     page.locator(".whale-watch-trades").wait_for()
     assert page.locator(".whale-watch-trades").count(), (
         "Need at least one actual large trade to test its scrollbar"
@@ -140,12 +141,7 @@ with sync_playwright() as p:
         "(el)=>getComputedStyle(el).scrollbarColor"
     )
     assert "120, 109, 85" in color, color
-    right = page.get_by_role("button", name="Scroll large trades right", exact=True)
-    if right.is_enabled():
-        right.click()
-        page.wait_for_function(
-            "document.querySelector('.whale-watch-trades').scrollLeft>0"
-        )
+    page.get_by_role("button", name="Close whale watch", exact=True).click()
     page.set_viewport_size({"width": 390, "height": 844})
     assert not page.evaluate("document.documentElement.scrollWidth>window.innerWidth")
     assert not errors, errors
