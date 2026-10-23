@@ -43,7 +43,7 @@ with sync_playwright() as p:
     buy = page.get_by_role("status").inner_text()
     page.reload()
     page.get_by_role("button", name="Enter local test account").first.click()
-    page.get_by_role("heading", name="Your recent trades").wait_for()
+    page.get_by_role("button", name="My trades", exact=True).wait_for()
     page.get_by_role("button", name="sell", exact=True).click()
     page.locator("#amount").fill("1")
     page.get_by_role("button", name="Preview sell").click()

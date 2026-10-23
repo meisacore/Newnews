@@ -136,7 +136,7 @@ with sync_playwright() as p:
     color = page.locator(".whale-watch-trades").evaluate(
         "(el)=>getComputedStyle(el).scrollbarColor"
     )
-    assert "120, 109, 85" in color, color
+    assert "69, 74, 80" in color, color
     right = page.get_by_role("button", name="Scroll large trades right", exact=True)
     if right.is_enabled():
         right.click()

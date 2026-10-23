@@ -278,3 +278,28 @@ NORX_TEST_URL=http://127.0.0.1:8000 BROWSER_EXECUTABLE=/usr/bin/chromium .venv/b
 It submits a virtual buy to
 the test account, checks search/sorting/execution filters, and checks five mobile
 routes. Use a separate temporary `NORX_DB` for this test.
+
+### Reference interface redesign
+
+The uploaded `trial-main.zip` is a visual reference. NORX now uses its charcoal
+surfaces, green accents, slim header, separate full-height Pulse columns, presets
+in column headers, fixed status bar, and floating mobile navigation. NORX's star
+field and animated welcome remain; the welcome typography and button match the
+exchange. The reference's disconnected pages and placeholder controls are not
+used as NORX market data.
+
+Global market search opens with the header button or `/` (also Ctrl/Cmd+K outside
+text fields), searches names, symbols and coin IDs, and opens real market charts.
+Escape closes the native modal. The header equity estimate is cash plus holdings
+at spot prices. Portfolio shows that breakdown, saved positions, and the latest
+50 account executions. Equity and position values are estimates, not guaranteed
+sale proceeds. The trade workspace combines the chart and coin execution feed
+with a USD order ticket and a live position summary. Privy configuration and all
+existing virtual-money/agent rules remain unchanged.
+
+The terminal browser check also exercises global search, saved portfolio rows,
+three desktop columns, and five routes at mobile width. The Pulse control check
+expects the current neutral charcoal scrollbar rather than the former gold one.
+
+[View the updated Pulse interface](docs/interface-preview.png) (captured from the
+running NORX simulation, with real simulated coins and agent activity).

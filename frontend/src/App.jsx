@@ -7,7 +7,8 @@ import {
 import "./style.css";
 import Pulse from "./Pulse";
 import Agents from "./Agents";
-import { TerminalBar, Discover, Activity } from "./Terminal";
+import { Discover, Activity } from "./Terminal";
+import { ExchangeHeader, ExchangeFooter, Portfolio } from "./ExchangeChrome";
 import "./terminal.css";
 import { validateMarketState } from "./marketState";
 
@@ -51,23 +52,23 @@ function Chart({ coin, interval, refresh }) {
   const [empty, setEmpty] = useState(true);
   useEffect(() => {
     const c = createChart(el.current, {
-      height: 340,
+      height: 420,
       autoSize: true,
-      layout: { background: { color: "#101921" }, textColor: "#90a0ab" },
+      layout: { background: { color: "#111315" }, textColor: "#8d9299" },
       grid: {
-        vertLines: { color: "#1a2630" },
-        horzLines: { color: "#1a2630" },
+        vertLines: { color: "#202327" },
+        horzLines: { color: "#202327" },
       },
       timeScale: { timeVisible: true },
-      rightPriceScale: { borderColor: "#26343d" },
+      rightPriceScale: { borderColor: "#292d31" },
     });
     chart.current = c;
     series.current = c.addSeries(CandlestickSeries, {
-      upColor: "#6ad2ac",
-      downColor: "#ee8793",
+      upColor: "#77d99b",
+      downColor: "#ed7d8f",
       borderVisible: false,
-      wickUpColor: "#6ad2ac",
-      wickDownColor: "#ee8793",
+      wickUpColor: "#77d99b",
+      wickDownColor: "#ed7d8f",
     });
     volume.current = c.addSeries(HistogramSeries, {
       priceFormat: { type: "volume" },
@@ -243,6 +244,9 @@ export function App({ auth }) {
     setQuote(null);
     setNotice("");
   }, [selected, side, amount]);
+  useEffect(() => {
+    setNotice("");
+  }, [route.view]);
   const coin = state?.coins.find((c) => c.id === selected);
   async function action() {
     setBusy(true);
@@ -287,47 +291,14 @@ export function App({ auth }) {
   }
   return (
     <div className={"app terminal-app view-" + route.view}>
-      <header>
-        <a className="logo" href="/">
-          NOR<span>X</span>
-        </a>
-        <nav className="world-nav" aria-label="World navigation">
-          {[
-            ["pulse", "Pulse"],
-            ["discover", "Discover"],
-            ["portfolio", "Portfolio"],
-            ["agents", "Agents"],
-          ].map(([id, label]) => (
-            <a
-              key={id}
-              className={route.view === id ? "selected" : ""}
-              href={"#" + id}
-            >
-              {label}
-            </a>
-          ))}
-        </nav>
-        <div className="account">
-          {auth.authenticated ? (
-            <>
-              <span>
-                {me ? dollars(me.cash) : "Loading balance…"}{" "}
-                <small>virtual USD</small>
-              </span>
-              <button onClick={() => auth.logout()}>Sign out</button>
-            </>
-          ) : (
-            <button disabled={!auth.ready} onClick={() => auth.login()}>
-              {auth.label || "Sign in"}
-            </button>
-          )}
-        </div>
-      </header>
-      <TerminalBar state={state} me={me} />
-      <div className="disclaimer">
-        SIMULATED WORLD · No real money, wallets, or withdrawals{" "}
-        {auth.dev && " · LOCAL TEST ACCOUNT"}
-      </div>
+      <ExchangeHeader
+        state={state}
+        me={me}
+        auth={auth}
+        route={route}
+        selected={selected}
+        onOpen={openCoin}
+      />
       {route.view !== "pulse" && (
         <section className="intro">
           <div>
@@ -336,14 +307,13 @@ export function App({ auth }) {
               {route.view === "coin"
                 ? "Your next move."
                 : route.view === "portfolio"
-                  ? "Your portfolio."
+                  ? "Portfolio"
                   : route.view === "agents"
                     ? "Meet the traders."
-                    : "Explore the market."}
+                    : "Discover"}
             </h1>
             <p className="muted">
-              Trade fictional coins with virtual dollars in a world that keeps
-              moving.
+              Your edge starts here. Trade the simulated market in virtual USD.
             </p>
           </div>
           <div className="condition">
@@ -456,6 +426,7 @@ export function App({ auth }) {
               current price is the pool spot price. Market cap is a valuation,
               not cash invested.
             </p>
+            <Activity state={state} selected={selected} me={me} />
           </section>
           <aside className="panel order-ticket">
             <h2>Make your move</h2>
@@ -549,6 +520,20 @@ export function App({ auth }) {
                 {auth.label || "Sign in to trade"}
               </button>
             )}
+            <div className="ticket-position">
+              <span>Your position</span>
+              <strong>
+                {(me?.holdings[selected] || 0).toLocaleString()} {coin.symbol}
+              </strong>
+              <div>
+                <span>Spot value</span>
+                <b>{dollars((me?.holdings[selected] || 0) * coin.price)}</b>
+              </div>
+              <div>
+                <span>Available USD</span>
+                <b>{me ? dollars(me.cash) : "—"}</b>
+              </div>
+            </div>
             <p className="muted fine">
               New accounts receive $10,000 virtual USD once. Your portfolio is
               saved when you leave.
@@ -556,89 +541,11 @@ export function App({ auth }) {
           </aside>
         </main>
       )}
-      {route.view === "coin" && coin && (
-        <Activity state={state} selected={selected} me={me} />
+
+      {route.view === "portfolio" && (
+        <Portfolio me={me} state={state} auth={auth} onOpen={openCoin} />
       )}
-      {(route.view === "coin" || route.view === "portfolio") && (
-        <section className="bottom">
-          <div className="panel">
-            <h2>Your portfolio</h2>
-            {!me ? (
-              <p className="muted">Sign in to load your saved holdings.</p>
-            ) : (
-              <>
-                <div className="portfolio-line">
-                  <span>Virtual USD</span>
-                  <strong>{dollars(me.cash)}</strong>
-                </div>
-                {(me.positions || []).map((c) => (
-                  <div className="portfolio-line" key={c.id}>
-                    <a
-                      className="holding-link"
-                      href={"#coin/" + encodeURIComponent(c.id)}
-                    >
-                      {c.symbol} · {c.qty.toLocaleString()} tokens ↗
-                    </a>
-                    <strong>
-                      {dollars(
-                        c.qty *
-                          (state?.coins.find((coin) => coin.id === c.id)
-                            ?.price ?? c.price),
-                      )}
-                    </strong>
-                  </div>
-                ))}
-                <p className="muted fine">
-                  Holding values use spot prices. Actual sale proceeds depend on
-                  liquidity and fees.
-                </p>
-                <h3>Your recent trades</h3>
-                {me.trades.slice(0, 8).map((t) => (
-                  <div className="trade" key={t.id}>
-                    <span>
-                      {t.side} {t.qty.toLocaleString()} {t.coin}
-                    </span>
-                    <span>{dollars(t.amount / 1e6)}</span>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-          <div className="panel">
-            <h2>World activity</h2>
-            <p className="muted fine">
-              Agents have finite budgets and different strategies, wealth,
-              patience, and risk limits.
-            </p>
-            {state?.trades.slice(0, 10).map((t) => (
-              <div className="trade" key={t.id}>
-                <div>
-                  <span className={t.side === "buy" ? "up" : "down"}>
-                    {t.side.toUpperCase()}
-                  </span>{" "}
-                  {t.qty.toLocaleString()} {t.coin}
-                  <small>
-                    {t.agent_name ||
-                      (t.account.startsWith("agent-")
-                        ? t.account
-                        : "Player")}{" "}
-                    {t.persona && "· " + t.persona} ·{" "}
-                    {new Date(t.ts * 1000).toLocaleTimeString()}
-                  </small>
-                  {t.persona && (
-                    <small className="trade-reason">{t.reason}</small>
-                  )}
-                </div>
-                <span>{dollars(t.amount / 1e6)}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-      <footer>
-        All assets, balances, and market activity are fictional. No deposits or
-        withdrawals.
-      </footer>
+      <ExchangeFooter state={state} feedError={feedError} />
     </div>
   );
 }

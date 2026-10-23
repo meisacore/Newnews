@@ -148,87 +148,96 @@ export default function PulseColumn({
           <option value="volume">Volume</option>
           <option value="cap">Market cap</option>
         </select>
-      </div>
-      <div className="column-tools">
-        <div className="column-presets">
-          {BUY_PRESETS.map((value, index) => (
-            <button
-              key={value}
-              className={buy === value ? "selected" : ""}
-              aria-label={`Use ${value} USD preset for ${stage.title}`}
-              aria-pressed={buy === value}
-              title={"Prepare a $" + value + " virtual USD buy"}
-              onClick={() => setSettings((s) => ({ ...s, buy: value }))}
-            >
-              P{index + 1}
-              <small>${value}</small>
-            </button>
-          ))}
-        </div>
-        <div className="column-options">
-          <button
-            aria-label={"Filters for " + stage.title}
-            aria-expanded={showFilters}
-            className={filterCount ? "has-filters" : ""}
-            onClick={() => setShowFilters(!showFilters)}
-          >
-            Filters{filterCount ? " · " + filterCount : ""}
-          </button>
-          <button
-            aria-label={
-              (mode === "held" ? "Resume" : "Hold") +
-              " arrivals in " +
-              stage.title
-            }
-            title="Hold this column’s cards and displayed figures. The simulation and trade quotes stay live."
-            onClick={toggleHold}
-          >
-            <svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true">
-              {mode === "held" ? (
-                <path d="M3 1L10 6 3 11Z" fill="currentColor" />
-              ) : (
-                <path d="M3 2v8M8 2v8" stroke="currentColor" strokeWidth="2" />
-              )}
-            </svg>
-          </button>
-        </div>
-        {showFilters && (
-          <div
-            className="column-filters"
-            role="region"
-            aria-label={stage.title + " filters"}
-          >
-            <div className="filter-heading">
-              <strong>Filter this column</strong>
+        <div className="column-tools">
+          <div className="column-presets">
+            {BUY_PRESETS.map((value, index) => (
               <button
-                onClick={() => setSettings((s) => ({ ...s, filters: {} }))}
+                key={value}
+                className={buy === value ? "selected" : ""}
+                aria-label={`Use ${value} USD preset for ${stage.title}`}
+                aria-pressed={buy === value}
+                title={"Prepare a $" + value + " virtual USD buy"}
+                onClick={() => setSettings((s) => ({ ...s, buy: value }))}
               >
-                Clear
+                P{index + 1}
+                <small>${value}</small>
               </button>
-            </div>
-            <div className="filter-fields">
-              {fields.map(([key, label]) => (
-                <label key={key}>
-                  {label}
-                  <input
-                    type="number"
-                    min="0"
-                    step={key === "minHolders" ? "1" : "any"}
-                    aria-label={label + " for " + stage.title}
-                    placeholder="Any"
-                    value={settings.filters[key] ?? ""}
-                    onChange={(e) =>
-                      setSettings((s) => ({
-                        ...s,
-                        filters: { ...s.filters, [key]: e.target.value },
-                      }))
-                    }
-                  />
-                </label>
-              ))}
-            </div>
+            ))}
           </div>
-        )}
+          <div className="column-options">
+            <button
+              aria-label={"Filters for " + stage.title}
+              aria-expanded={showFilters}
+              className={filterCount ? "has-filters" : ""}
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              Filters{filterCount ? " · " + filterCount : ""}
+            </button>
+            <button
+              aria-label={
+                (mode === "held" ? "Resume" : "Hold") +
+                " arrivals in " +
+                stage.title
+              }
+              title="Hold this column’s cards and displayed figures. The simulation and trade quotes stay live."
+              onClick={toggleHold}
+            >
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 12 12"
+                aria-hidden="true"
+              >
+                {mode === "held" ? (
+                  <path d="M3 1L10 6 3 11Z" fill="currentColor" />
+                ) : (
+                  <path
+                    d="M3 2v8M8 2v8"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  />
+                )}
+              </svg>
+            </button>
+          </div>
+          {showFilters && (
+            <div
+              className="column-filters"
+              role="region"
+              aria-label={stage.title + " filters"}
+            >
+              <div className="filter-heading">
+                <strong>Filter this column</strong>
+                <button
+                  onClick={() => setSettings((s) => ({ ...s, filters: {} }))}
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="filter-fields">
+                {fields.map(([key, label]) => (
+                  <label key={key}>
+                    {label}
+                    <input
+                      type="number"
+                      min="0"
+                      step={key === "minHolders" ? "1" : "any"}
+                      aria-label={label + " for " + stage.title}
+                      placeholder="Any"
+                      value={settings.filters[key] ?? ""}
+                      onChange={(e) =>
+                        setSettings((s) => ({
+                          ...s,
+                          filters: { ...s.filters, [key]: e.target.value },
+                        }))
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
       <div className={"column-held " + (isHeld ? "is-held" : "")}>
         <span>

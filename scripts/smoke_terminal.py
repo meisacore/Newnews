@@ -13,6 +13,14 @@ with sync_playwright() as p:
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.goto(base + "/market.html#discover")
+    page.get_by_label("Search markets").wait_for()
+    page.keyboard.press("/")
+    search = page.get_by_role("dialog")
+    assert search.is_visible()
+    page.get_by_label("Search all tokens").fill("FROG")
+    search.get_by_role("button", name="Moon Frog FROG").wait_for()
+    page.keyboard.press("Escape")
+    assert not search.is_visible()
     page.get_by_label("Search markets").fill("FROG")
     row = page.locator("tbody tr")
     assert row.count() == 1
@@ -28,7 +36,10 @@ with sync_playwright() as p:
     page.locator(".execution-feed tbody tr").first.wait_for()
     assert page.locator(".execution-feed tbody tr").count() >= 1
     page.get_by_label("Filter trades").select_option("sell")
-    assert page.locator(".execution-feed tbody tr").count() == 0
+    assert all(
+        "SELL" in text
+        for text in page.locator(".execution-feed tbody tr").all_text_contents()
+    )
     page.get_by_label("Filter trades").select_option("all")
     state = page.request.get(base + "/api/state?selected=frog").json()
     assert state["coin_trades"] and all(
@@ -39,6 +50,19 @@ with sync_playwright() as p:
         for t in state["coin_trades"]
     )
     page.screenshot(path="/tmp/norx-terminal-chart.png", full_page=True)
+    page.get_by_role("link", name="Portfolio", exact=True).click()
+    page.get_by_role("heading", name="Portfolio", exact=True).wait_for()
+    assert page.locator(".portfolio-summary > div").count() == 4
+    assert "Account equity" in page.locator(".portfolio-summary").inner_text()
+    page.locator(".portfolio-workspace .market-name").filter(
+        has_text="FROG"
+    ).first.wait_for()
+    page.get_by_role("link", name="Pulse", exact=True).click()
+    page.get_by_role("heading", name="Pulse", exact=True).wait_for()
+    panels = page.locator(".pulse-column")
+    assert panels.count() == 3 and all(panels.nth(i).is_visible() for i in range(3))
+    assert page.locator(".pulse-columns").bounding_box()["height"] > 500
+    page.screenshot(path="/tmp/norx-reference-pulse.png")
     for route in ("pulse", "discover", "portfolio", "agents", "coin/frog"):
         page.goto(base + "/market.html#" + route)
         page.wait_for_timeout(500)
@@ -53,6 +77,6 @@ with sync_playwright() as p:
         page.set_viewport_size({"width": 1440, "height": 1000})
     assert not errors, errors
     print(
-        "PASS: search, sorting, $250 buy, private executions, side filter, five mobile routes, no browser errors"
+        "PASS: global search, sorting, $250 buy, private executions, saved portfolio, three desktop columns, five mobile routes, no browser errors"
     )
     browser.close()

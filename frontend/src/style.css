@@ -28,7 +28,7 @@ button {
   padding: 10px 16px;
 }
 button:hover {
-  border-color: #c9b48c;
+  border-color: #77d99b;
 }
 button:disabled {
   opacity: 0.5;
@@ -57,7 +57,7 @@ header {
   letter-spacing: 5px;
 }
 .logo span {
-  color: #c9b48c;
+  color: #77d99b;
 }
 .tag {
   color: #8b9ba8;
@@ -77,7 +77,7 @@ header {
 }
 .disclaimer {
   text-align: center;
-  color: #c9b48c;
+  color: #77d99b;
   letter-spacing: 2px;
   font-size: 10px;
   padding: 17px;
@@ -91,7 +91,7 @@ header {
 .eyebrow {
   font-size: 10px;
   letter-spacing: 3px;
-  color: #c9b48c;
+  color: #77d99b;
 }
 h1 {
   font-family: Manrope, sans-serif;
@@ -123,7 +123,7 @@ h3 {
 }
 .condition {
   text-transform: capitalize;
-  color: #c9b48c;
+  color: #77d99b;
   font-size: 14px;
   line-height: 1.8;
 }
@@ -153,7 +153,7 @@ h3 {
   padding: 20px;
 }
 .coin.selected {
-  border-color: #c9b48c;
+  border-color: #77d99b;
   background: #1c252b;
 }
 .coin strong {
@@ -170,10 +170,10 @@ h3 {
   text-align: right;
 }
 .up {
-  color: #6ad2ac !important;
+  color: #77d99b;
 }
 .down {
-  color: #ee8793 !important;
+  color: #ed7d8f;
 }
 main {
   display: grid;
@@ -199,10 +199,6 @@ main {
   padding: 7px 10px;
   margin-left: 4px;
   font-size: 11px;
-}
-.active {
-  background: #c9b48c !important;
-  color: #101921 !important;
 }
 .stats {
   display: grid;
@@ -246,7 +242,7 @@ label {
 }
 .input span {
   font-size: 13px;
-  color: #c9b48c;
+  color: #77d99b;
 }
 input {
   width: 100%;
@@ -257,7 +253,7 @@ input {
   outline: none;
 }
 .primary {
-  background: #c9b48c;
+  background: #77d99b;
   color: #101921;
   font-weight: 600;
   width: 100%;
@@ -381,12 +377,12 @@ body {
   border-bottom: 2px solid transparent;
 }
 .world-nav a.selected {
-  color: #d6c29a;
-  border-bottom-color: #c9b48c;
+  color: #77d99b;
+  border-bottom-color: #77d99b;
 }
 .back-to-pulse {
   display: inline-block;
-  color: #c9b48c;
+  color: #77d99b;
   margin: 0 0 20px;
   font-size: 12px;
 }
@@ -453,7 +449,7 @@ body {
   white-space: nowrap;
 }
 .quick-label span {
-  color: #c9b48c;
+  color: #77d99b;
   font-size: 10px;
 }
 .quick-label input {
@@ -473,7 +469,7 @@ body {
   color: #c5cfd6;
 }
 .launch-strip > span:last-child {
-  color: #c9b48c;
+  color: #77d99b;
 }
 .launch-strip .dot {
   height: 5px;
@@ -520,7 +516,7 @@ body {
   color: #8fa7ba;
 }
 .stage-icon.stretch {
-  color: #c9b48c;
+  color: #77d99b;
 }
 .stage-icon.migrated {
   color: #6ad2ac;
@@ -570,7 +566,7 @@ body {
   border: 0;
 }
 .pulse-open:focus-visible {
-  outline: 1px solid #c9b48c;
+  outline: 1px solid #77d99b;
   outline-offset: -2px;
 }
 .pulse-card-top {
@@ -604,7 +600,7 @@ body {
   right: -3px;
   font-style: normal;
   background: #18222c;
-  color: #c9b48c;
+  color: #77d99b;
   border: 1px solid #40515d;
   border-radius: 50%;
   font-size: 10px;
@@ -683,7 +679,7 @@ body {
 .pulse-progress i {
   height: 100%;
   display: block;
-  background: linear-gradient(90deg, #748b98, #c9b48c);
+  background: linear-gradient(90deg, #748b98, #77d99b);
 }
 .pulse-card-foot {
   display: flex;
@@ -721,7 +717,7 @@ body {
 }
 .pulse-empty > span {
   font-size: 30px;
-  color: #c9b48c66;
+  color: #77d99b66;
 }
 .pulse-empty strong {
   font-size: 12px;
@@ -759,7 +755,7 @@ body {
 }
 .loading-world {
   padding: 60px;
-  color: #c9b48c;
+  color: #77d99b;
 }
 .market-list {
   max-height: 400px;
@@ -945,7 +941,7 @@ body {
   }
 }
 .holding-link {
-  color: #c9b48c;
+  color: #77d99b;
 }
 .holding-link:hover {
   text-decoration: underline;
@@ -968,7 +964,7 @@ body {
 .whale-watch-title strong {
   display: block;
   font-size: 12px;
-  color: #d6c29a;
+  color: #77d99b;
   font-weight: 500;
 }
 .whale-watch-title small {
@@ -1025,7 +1021,7 @@ body {
   font-weight: 500;
   display: block;
   margin-top: 12px;
-  color: #d6c29a;
+  color: #77d99b;
 }
 .agent-grid {
   display: grid;
@@ -1111,7 +1107,7 @@ body {
 .trade-reason {
   max-width: 430px;
   line-height: 1.5;
-  color: #b3a58b !important;
+  color: #9da6a0 !important;
 }
 .world-nav {
   gap: 20px;
@@ -1228,8 +1224,8 @@ body {
 }
 .feed-status[data-status="delayed"] i,
 .feed-status[data-status="connecting"] i {
-  background: #c9b48c;
-  box-shadow: 0 0 7px #c9b48c44;
+  background: #77d99b;
+  box-shadow: 0 0 7px #77d99b44;
 }
 .feed-status[data-status="paused"] i,
 .feed-status[data-status="offline"] i {
@@ -1273,7 +1269,7 @@ body {
   border-color: #716344;
 }
 .column-presets button.selected small {
-  color: #c9b48c;
+  color: #77d99b;
 }
 .column-options .has-filters {
   color: #dfc797;

@@ -1,30 +1,10 @@
 import React, { useState } from "react";
-import { simulationDisplay } from "./marketState";
 const usd = (n) =>
   new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: n < 1 ? 5 : 2,
   }).format(n || 0);
-export function TerminalBar({ state, me }) {
-  const health = simulationDisplay(state?.simulation);
-  return (
-    <div className="terminal-bar">
-      <span className="terminal-mode">✦ NORX PAPER EXCHANGE</span>
-      <span className={health.status === "paused" ? "down" : "up"}>
-        ● {health.label}
-      </span>
-      <span>{state?.total_coins ?? "—"} markets</span>
-      <span>{state?.agents.length ?? "—"} autonomous traders</span>
-      <span className="terminal-economy">
-        {state?.condition || "Connecting"} economy
-      </span>
-      <span className="terminal-cash">
-        Cash <b>{me ? usd(me.cash) : "Sign in to trade"}</b>
-      </span>
-    </div>
-  );
-}
 export function Discover({ state, onOpen, onBuy, busy }) {
   const [query, setQuery] = useState(""),
     [sort, setSort] = useState("volume_24h"),
