@@ -7,7 +7,9 @@ command arguments. Original files are read-only; imports are atomic per world.
 import argparse
 import os
 import sqlite3
+import sys
 import tempfile
+from contextlib import closing
 from pathlib import Path
 
 from economy import Market, SCHEMA
@@ -39,8 +41,12 @@ def import_world(source, target, apply=False):
         snapshot = Path(folder) / "snapshot.sqlite3"
         # SQLite's backup API includes committed WAL data and does not mutate
         # the original. Supply/schema upgrades run only on this temporary copy.
-        with sqlite3.connect(source.as_uri() + "?mode=ro", uri=True) as original:
-            with sqlite3.connect(snapshot) as copied:
+        # sqlite3.Connection.__exit__ commits/rolls back but does not close the
+        # handle. Windows cannot remove the snapshot while either handle lives.
+        with closing(
+            sqlite3.connect(source.as_uri() + "?mode=ro", uri=True)
+        ) as original:
+            with closing(sqlite3.connect(snapshot)) as copied:
                 original.backup(copied)
         market = Market(snapshot)
         with market.connection() as local:
@@ -129,8 +135,23 @@ if __name__ == "__main__":
         main()
     except Exception as exc:
         # Never echo a connection string, password, token, or a driver traceback.
-        raise SystemExit(
-            "Migration failed ("
-            + type(exc).__name__
-            + "). Destination must be empty and reachable; originals are unchanged. Check database settings and stop workers before retrying."
-        ) from None
+        if isinstance(exc, PermissionError):
+            message = (
+                "Migration failed (PermissionError): a local database or temporary "
+                "file could not be accessed or removed. Stop NORX, workers and "
+                "database viewers; check write access to data and your temporary "
+                "folder. Original SQLite data is unchanged."
+            )
+        else:
+            message = (
+                "Migration failed ("
+                + type(exc).__name__
+                + "). "
+                + (
+                    "Destination must be empty and reachable. "
+                    if "--apply" in sys.argv
+                    else "Preview failed while reading the local snapshot; Supabase was not modified. "
+                )
+                + "Original SQLite data is unchanged. Stop workers and check your settings before retrying."
+            )
+        raise SystemExit(message) from None
