@@ -46,6 +46,18 @@ $env:NORX_DEV_AUTH = "0"
 The environment variable lives in this terminal session. Set it again after opening
 a new terminal. Do not print `$env:DATABASE_URL` or share terminal environment dumps.
 
+Before importing, check the connection without changing any market data:
+
+```powershell
+.\.venv\Scripts\python migrate_storage.py --check-connection
+```
+
+This verifies connectivity, credentials and permission to create world schemas.
+Failures report a category (authentication, host/username mismatch, network, TLS,
+etc.) without printing your connection URL or password. Share only that diagnostic
+if you need help. `--apply` also performs this check before copying any snapshots.
+A successful SQLite preview on its own does not verify a Supabase connection.
+
 ## 3. Preview and import saved worlds
 
 **Do this before starting the backend with DATABASE_URL set.** A new backend starts

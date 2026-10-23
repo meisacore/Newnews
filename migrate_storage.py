@@ -7,7 +7,6 @@ command arguments. Original files are read-only; imports are atomic per world.
 import argparse
 import os
 import sqlite3
-import sys
 import tempfile
 from contextlib import closing
 from pathlib import Path
@@ -96,11 +95,92 @@ def import_world(source, target, apply=False):
         return counts
 
 
+def connection_check(target):
+    """Read-only check using the same connection parameters as the worker lock."""
+    import psycopg
+
+    with psycopg.connect(target.url, autocommit=True, connect_timeout=10) as db:
+        db.execute("SELECT 1")
+        can_create = db.execute(
+            "SELECT has_database_privilege(current_user,current_database(),'CREATE')"
+        ).fetchone()[0]
+    print(
+        "Connection successful: PostgreSQL is reachable and credentials were accepted."
+    )
+    if not can_create:
+        raise ValueError("Database role needs CREATE privilege for NORX world schemas")
+    print("Schema creation permission: OK. No market data was changed.")
+
+
+def safe_failure(exc):
+    """Classify driver errors without echoing DSNs, passwords or row contents."""
+    import psycopg
+    from filelock import Timeout
+
+    if isinstance(exc, PermissionError):
+        return "Local file permission error. Stop NORX and database viewers; check write access to data and your temporary folder."
+    if isinstance(exc, Timeout):
+        return "A NORX worker still owns the source or destination world. Stop the backend and all standalone workers, then retry."
+    if isinstance(exc, psycopg.Error):
+        detail = str(exc).lower()  # Inspect only; never print the raw driver error.
+        code = exc.sqlstate
+        if "tenant or user not found" in detail:
+            return "Supabase could not match the pooler host and username to your project. Copy the Session pooler URI again from Connect; keep the postgres.PROJECT_REF username."
+        if (
+            code in ("28P01", "28000")
+            or "password authentication failed" in detail
+            or "authentication failed" in detail
+        ):
+            return "Database authentication failed. Re-enter the Supabase database password (not an API key), and check the Session pooler username. Rebuild DATABASE_URL with the password percent-encoded."
+        if (
+            "translate host name" in detail
+            or "getaddrinfo" in detail
+            or "name or service not known" in detail
+        ):
+            return "The database hostname could not be resolved. Check the Session pooler hostname and your DNS/network connection."
+        if "timeout" in detail or "timed out" in detail:
+            return "The database connection or operation timed out. Check that the Supabase project is active and that your network allows outbound port 5432."
+        if "connection refused" in detail:
+            return "The database refused the connection. Check the Session pooler host/port and that your Supabase project is running."
+        if "too many" in detail or "maxclients" in detail or code == "53300":
+            return "The database or pooler has reached its connection limit. Stop duplicate NORX backends and workers, then retry."
+        if code == "42501":
+            return "The database role lacks permission for NORX schemas/tables. Use the backend database connection from Supabase Connect, not a browser API key."
+        if "ssl" in detail or "tls" in detail or "certificate" in detail:
+            return "The encrypted database connection failed. Keep sslmode=require (or a correctly configured verify-full connection) and check for network interception."
+        if "closed" in detail or "reset" in detail or "eof" in detail:
+            return "The database/pooler connection closed unexpectedly. Check that the Supabase project is active, use Session pooler port 5432, and retry the connection check."
+        return (
+            "PostgreSQL operation failed. Run --check-connection first; report this category and SQLSTATE "
+            + (code or "unavailable")
+            + ". Do not share DATABASE_URL."
+        )
+    if isinstance(exc, sqlite3.Error):
+        return "The local SQLite snapshot could not be read or upgraded. Stop NORX and database viewers, and check the source file."
+    if isinstance(exc, ValueError):
+        # Only print known application-authored errors; never arbitrary values.
+        known = {
+            "Destination world is not empty; import refused",
+            "Source database does not exist",
+            "Import row count mismatch",
+            "Database role needs CREATE privilege for NORX world schemas",
+        }
+        if str(exc) in known:
+            return str(exc) + "."
+    return "Migration could not finish. Check the source path, database configuration and whether workers are stopped."
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", default=os.getenv("NORX_DB", "data/norx.sqlite3"))
     parser.add_argument("--world", choices=["all", *SCENARIOS], default="all")
-    parser.add_argument(
+    action = parser.add_mutually_exclusive_group()
+    action.add_argument(
+        "--check-connection",
+        action="store_true",
+        help="Check PostgreSQL credentials/network without reading or importing saved worlds",
+    )
+    action.add_argument(
         "--apply",
         action="store_true",
         help="Import; default only previews source snapshots",
@@ -109,6 +189,11 @@ def main():
     target = database_path()
     if not isinstance(target, PostgresTarget):
         parser.error("Set DATABASE_URL privately in your terminal first")
+    if args.check_connection:
+        connection_check(target)
+        return
+    if args.apply:
+        connection_check(target)
     source = Path(args.source).expanduser()
     source = source if source.is_absolute() else PROJECT_ROOT / source
     chosen = SCENARIOS if args.world == "all" else [args.world]
@@ -134,24 +219,6 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as exc:
-        # Never echo a connection string, password, token, or a driver traceback.
-        if isinstance(exc, PermissionError):
-            message = (
-                "Migration failed (PermissionError): a local database or temporary "
-                "file could not be accessed or removed. Stop NORX, workers and "
-                "database viewers; check write access to data and your temporary "
-                "folder. Original SQLite data is unchanged."
-            )
-        else:
-            message = (
-                "Migration failed ("
-                + type(exc).__name__
-                + "). "
-                + (
-                    "Destination must be empty and reachable. "
-                    if "--apply" in sys.argv
-                    else "Preview failed while reading the local snapshot; Supabase was not modified. "
-                )
-                + "Original SQLite data is unchanged. Stop workers and check your settings before retrying."
-            )
+        message = "Migration failed (" + type(exc).__name__ + "): " + safe_failure(exc)
+        message += " Original SQLite data is unchanged."
         raise SystemExit(message) from None
