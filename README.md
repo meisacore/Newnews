@@ -303,3 +303,24 @@ expects the current neutral charcoal scrollbar rather than the former gold one.
 
 [View the updated Pulse interface](docs/interface-preview.png) (captured from the
 running NORX simulation, with real simulated coins and agent activity).
+
+### Blank screen after Enter World
+
+The exchange HTML contains its own dark, starry loading screen before JavaScript
+starts. A failed app-module load displays an error and reload link; a React startup
+error is caught by the app boundary. Slow startup displays guidance after 15 seconds.
+The welcome and exchange no longer wait for external Google Fonts.
+
+Vite selects the authentication entry from `VITE_PRIVY_APP_ID`: without an ID,
+local mode does not scan or bundle the Privy SDK. With an ID, the lazy Privy entry
+is used. Restart Vite after changing that setting or updating the project.
+If an older development dependency cache is still present, stop the frontend and
+run this in `frontend` (also works in PowerShell):
+
+```sh
+npm run dev -- --force
+```
+
+Then hard-refresh the browser with Ctrl+Shift+R. Run
+`NORX_TEST_URL=http://127.0.0.1:5173 .venv/bin/python scripts/smoke_startup.py`
+from the repository root to check the Vite startup path and module-load failure UI.

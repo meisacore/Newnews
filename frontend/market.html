@@ -7,7 +7,68 @@
     <meta name="theme-color" content="#0b0e14" />
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #0b0d0f;
+        color: #eee;
+        font-family: Arial, Helvetica, sans-serif;
+      }
+      #startup {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        background:
+          linear-gradient(#080a0cb8, #080a0cd9),
+          url("/sky-bg.jpg") center/cover;
+      }
+      .startup-card {
+        max-width: 420px;
+        padding: 28px;
+      }
+      .startup-brand {
+        font-size: 36px;
+        font-weight: 700;
+        letter-spacing: -2px;
+      }
+      .startup-brand span {
+        color: #77d99b;
+      }
+      #startup-message {
+        font-size: 16px;
+        margin-top: 26px;
+      }
+      #startup-details {
+        font-size: 12px;
+        line-height: 1.7;
+        color: #929da5;
+      }
+      .startup-reload {
+        display: inline-block;
+        background: #1d2420;
+        color: #a6e9bc;
+        border: 1px solid #395644;
+        border-radius: 6px;
+        padding: 9px 15px;
+        text-decoration: none;
+        font-size: 12px;
+        margin-top: 12px;
+      }
+    </style>
+    <div id="root">
+      <div id="startup" role="status">
+        <div class="startup-card">
+          <div class="startup-brand">norx<span>.</span></div>
+          <p id="startup-message">Opening the exchange…</p>
+          <p id="startup-details">Loading charts and market controls.</p>
+          <a class="startup-reload" href="market.html">Reload exchange</a
+          ><noscript><p>Enable JavaScript to open the exchange.</p></noscript>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/bootstrap.js"></script>
   </body>
 </html>
