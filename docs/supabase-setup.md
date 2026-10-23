@@ -79,7 +79,9 @@ Check that the expected worlds and counts appear, then run:
 ```
 
 The importer copies accounts, holdings, pools, history, agents and completed quote
-results. It uses SQLite's snapshot backup API, applies any legacy schema/supply
+results. Bulk imports use a dedicated connection with a 15-minute statement limit
+and print per-table row counts as they run. This connection is explicitly closed
+on success or failure; the API keeps its separate 30-second statement limit. It uses SQLite's snapshot backup API, applies any legacy schema/supply
 upgrade only to a temporary copy, verifies row counts, and leaves the originals
 unchanged. Pending quotes expire so the user must preview again. Trade IDs and
 completed retry results are preserved. Each world's import commits atomically;

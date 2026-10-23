@@ -32,6 +32,19 @@ class MigrationDiagnosticTests(unittest.TestCase):
                 self.assertNotIn("postgresql://", result)
                 self.assertNotIn("user:", result)
 
+    def test_statement_cancellation_is_not_reported_as_network_failure(self):
+        result = safe_failure(
+            psycopg.errors.QueryCanceled("canceling statement due to statement timeout")
+        )
+        self.assertIn("statement time limit", result)
+        self.assertIn("15-minute", result)
+        self.assertNotIn("outbound port", result)
+        result = safe_failure(
+            psycopg.errors.QueryCanceled("canceling statement due to user request")
+        )
+        self.assertIn("current world import did not commit", result)
+        self.assertNotIn("outbound port", result)
+
     def test_connection_check_only_reads_and_does_not_print_url(self):
         target = PostgresTarget("postgresql://user:private-password@host/postgres")
         raw = MagicMock()

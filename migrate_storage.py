@@ -8,14 +8,14 @@ import argparse
 import os
 import sqlite3
 import tempfile
-from contextlib import closing
+from contextlib import closing, contextmanager
 from pathlib import Path
 
 from economy import Market, SCHEMA
 from paths import database_path, world_path, PROJECT_ROOT
 from scenarios import SCENARIOS
 from worker import worker_lock
-from storage import PostgresTarget, connection, postgres_worker_lock
+from storage import PostgresTarget, PostgresConnection, postgres_worker_lock
 
 TABLES = (
     "accounts",
@@ -30,12 +30,47 @@ TABLES = (
 )
 
 
-def import_world(source, target, apply=False):
+@contextmanager
+def migration_connection(target):
+    """One explicitly closed connection; bulk imports do not use API pools."""
+    import psycopg
     from psycopg import sql
 
+    with psycopg.connect(target.url, autocommit=True, connect_timeout=10) as raw:
+        # A historical COPY can legitimately exceed the API's 30-second limit.
+        # These session settings disappear on close and never change API limits.
+        raw.execute("SET statement_timeout TO '15min'")
+        raw.execute("SET lock_timeout TO '15s'")
+        db = PostgresConnection(raw, target.schema)
+        try:
+            db.execute("BEGIN IMMEDIATE")
+            raw.execute(
+                "SELECT pg_advisory_xact_lock(hashtext(%s))",
+                ("norx-schema-" + target.schema,),
+            )
+            raw.execute(
+                sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(
+                    sql.Identifier(target.schema)
+                )
+            )
+            raw.execute(
+                sql.SQL("SET LOCAL search_path TO {}").format(
+                    sql.Identifier(target.schema)
+                )
+            )
+            yield db
+        finally:
+            raw.rollback()
+
+
+def import_world(source, target, apply=False, progress=None):
+    from psycopg import sql
+
+    report = progress or (lambda message: None)
     source = Path(source).resolve()
     if not source.is_file():
         raise ValueError("Source database does not exist")
+    report("preparing local snapshot")
     with worker_lock(source), tempfile.TemporaryDirectory() as folder:
         snapshot = Path(folder) / "snapshot.sqlite3"
         # SQLite's backup API includes committed WAL data and does not mutate
@@ -55,7 +90,8 @@ def import_world(source, target, apply=False):
             }
             if not apply:
                 return counts
-            with postgres_worker_lock(target), connection(target) as db:
+            report("opening dedicated import connection (15-minute statement limit)")
+            with postgres_worker_lock(target), migration_connection(target) as db:
                 db.executescript(SCHEMA)
                 try:
                     if any(
@@ -66,6 +102,7 @@ def import_world(source, target, apply=False):
                             "Destination world is not empty; import refused"
                         )
                     for table in TABLES:
+                        report(f"copying {table}: {counts[table]:,} rows")
                         columns = [
                             r[1] for r in local.execute(f'PRAGMA table_info("{table}")')
                         ]
@@ -138,6 +175,10 @@ def safe_failure(exc):
             or "name or service not known" in detail
         ):
             return "The database hostname could not be resolved. Check the Session pooler hostname and your DNS/network connection."
+        if code == "57014" or isinstance(exc, psycopg.errors.QueryCanceled):
+            if "statement timeout" in detail:
+                return "PostgreSQL canceled an operation because its statement time limit was reached. Bulk imports need the updated migration helper with a 15-minute limit; API time limits are unchanged. The current world import did not commit."
+            return "PostgreSQL canceled the operation. The current world import did not commit. Keep the backend stopped and retry; previously completed worlds must be skipped with --world."
         if "timeout" in detail or "timed out" in detail:
             return "The database connection or operation timed out. Check that the Supabase project is active and that your network allows outbound port 5432."
         if "connection refused" in detail:
@@ -205,7 +246,16 @@ def main():
                 parser.error("Source database does not exist")
             continue
         found = True
-        counts = import_world(path, world_path(target, world), args.apply)
+        counts = import_world(
+            path,
+            world_path(target, world),
+            args.apply,
+            progress=(
+                lambda message, world=world: print(world + ": " + message, flush=True)
+            )
+            if args.apply
+            else None,
+        )
         print(
             world
             + (": imported " if args.apply else ": preview ")

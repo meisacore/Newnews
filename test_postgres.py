@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from economy import Market, SUPPLY, UNIT
-from migrate_storage import import_world
+from migrate_storage import import_world, migration_connection
 from paths import world_path
 from storage import PostgresTarget, postgres_worker_lock, _pools
 from filelock import Timeout
@@ -206,6 +206,34 @@ class PostgresTests(unittest.TestCase):
             import_world(source, self.target, apply=True)
             self.assertEqual(
                 Market(self.target).account("did:privy:saved")["cash"], 10000
+            )
+
+    def test_bulk_import_timeout_is_separate_and_connection_always_closes(self):
+        import psycopg
+        from storage import connection
+
+        self.assertNotIn(self.target, _pools)
+        with migration_connection(self.target) as db:
+            raw = db.raw
+            self.assertEqual(
+                raw.execute("SHOW statement_timeout").fetchone()[0], "15min"
+            )
+            raw.execute("SELECT pg_sleep(0.06)")
+        self.assertTrue(raw.closed)
+        self.assertNotIn(self.target, _pools)
+        with self.assertRaises(psycopg.errors.QueryCanceled):
+            with migration_connection(self.target) as db:
+                canceled_raw = db.raw
+                db.raw.execute("SET LOCAL statement_timeout TO '20ms'")
+                db.raw.execute("SELECT pg_sleep(0.08)")
+        self.assertTrue(canceled_raw.closed)
+        self.assertNotIn(self.target, _pools)
+        # Neither successful uncommitted work nor cancellation leaves partial
+        # schemas. The normal API connection keeps its short request timeout.
+        Market(self.target)
+        with connection(self.target) as db:
+            self.assertEqual(
+                db.raw.execute("SHOW statement_timeout").fetchone()[0], "30s"
             )
 
     def test_api_uses_postgres_and_private_rls_tables(self):
