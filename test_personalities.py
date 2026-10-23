@@ -57,7 +57,7 @@ class PersonalityTests(unittest.TestCase):
 
     def test_disciplined_whale_refuses_overpriced_market_while_reckless_one_buys(self):
         with self.market.transaction() as db:
-            db.execute("UPDATE coins SET reference=.01 WHERE id='frog'")
+            db.execute("UPDATE coins SET reference=.00001 WHERE id='frog'")
             self.assertFalse(
                 self.market._agent_decision(
                     db, self.agent(db, "agent-whale-01"), "frog", eager_rng()
@@ -71,7 +71,7 @@ class PersonalityTests(unittest.TestCase):
 
     def test_disciplined_whale_sizes_down_for_actual_execution_cost(self):
         with self.market.transaction() as db:
-            db.execute("UPDATE coins SET reference=1 WHERE id='frog'")
+            db.execute("UPDATE coins SET reference=.001 WHERE id='frog'")
             coin = db.execute("SELECT * FROM coins WHERE id='frog'").fetchone()
             spot = coin["cash"] / coin["tokens"]
             self.assertTrue(
@@ -86,7 +86,7 @@ class PersonalityTests(unittest.TestCase):
                 trade["amount"] / trade["qty"],
                 spot * (1 + PERSONALITIES["patient_value"].impact_bps / 10000),
             )
-            self.assertLessEqual(trade["amount"] / trade["qty"], UNIT * 0.995)
+            self.assertLessEqual(trade["amount"] / trade["qty"], UNIT * 0.001 * 0.995)
 
     def test_reckless_overpayment_can_transfer_money_to_other_traders_and_lose(self):
         self.market.account("alice")

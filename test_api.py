@@ -91,12 +91,39 @@ class ApiTests(unittest.TestCase):
                         "Backend did not start the simulation and launch a due batch"
                     )
                 time.sleep(0.02)
-            self.assertEqual(state["api_version"], 4)
+            self.assertEqual(state["api_version"], 5)
             self.assertEqual(state["total_coins"], 8)
         from worker import worker_lock
 
         with worker_lock(self.server.market.path):
             pass  # API shutdown released ownership.
+
+    def test_day_chart_covers_actual_history_and_accepts_15_minute_candles(self):
+        now = int(time.time())
+        market = self.server.market
+        market.account("history")
+        with patch("economy.time.time", return_value=now - 23 * 3600):
+            q = market.quote("history", "frog", "buy", 100 * 1000000)
+            market.execute("history", q["id"], "old-history")
+        q = market.quote("history", "frog", "buy", 50 * 1000000)
+        market.execute("history", q["id"], "new-history")
+        day = self.client.get("/api/candles/frog?interval=300&range_seconds=86400")
+        short = self.client.get("/api/candles/frog?interval=300&range_seconds=7200")
+        self.assertEqual(day.status_code, 200)
+        self.assertGreater(len(day.json()), 250)
+        self.assertLess(day.json()[0]["time"], short.json()[0]["time"])
+        self.assertEqual(
+            self.client.get(
+                "/api/candles/frog?interval=900&range_seconds=86400"
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.get(
+                "/api/candles/frog?interval=300&range_seconds=999999"
+            ).status_code,
+            400,
+        )
 
     def test_trade_flow_and_account_separation(self):
         h = self.token()

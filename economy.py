@@ -13,7 +13,8 @@ from personalities import PERSONALITIES, WEALTHY_ENTRANTS, intention
 
 UNIT = 1_000_000  # integer millionths of a dollar
 START = 10_000 * UNIT
-SUPPLY = 1_000_000
+SUPPLY = 1_000_000_000
+TOKEN_SCALE = 1000
 LAUNCH_INTERVAL = 60
 LAUNCH_BATCH = 5
 PULSE_LIMIT = 60
@@ -56,8 +57,8 @@ class Market:
                             name,
                             symbol,
                             int(100_000 * price * UNIT),
-                            100_000,
-                            price,
+                            100_000 * TOKEN_SCALE,
+                            price / TOKEN_SCALE,
                         ),
                     )
                     db.execute(
@@ -66,7 +67,7 @@ class Market:
                     ) if coin == "frog" else None
                     db.execute(
                         "INSERT INTO holdings VALUES(?,?,?)",
-                        ("treasury", coin, SUPPLY - 100_000),
+                        ("treasury", coin, SUPPLY - 100_000 * TOKEN_SCALE),
                     )
                 rng = random.Random(42)
                 for i in range(30):
@@ -85,6 +86,7 @@ class Market:
                     )
                 db.execute("INSERT INTO meta VALUES(?,?)", ("condition", "calm"))
                 db.execute("INSERT INTO meta VALUES(?,?)", ("tick", "0"))
+            self._migrate_supply(db)
             # Additive migration: existing accounts, holdings, pools, and history survive.
             now = int(time.time())
             db.execute(
@@ -99,6 +101,47 @@ class Market:
             self._ensure_personalities(db, now)
             self._ensure_crowd(db, now)
             db.commit()
+
+    def _migrate_supply(self, db):
+        for row in db.execute(
+            "SELECT c.id,c.tokens+COALESCE(h.qty,0) AS supply FROM coins c LEFT JOIN (SELECT coin,SUM(qty) AS qty FROM holdings GROUP BY coin) h ON h.coin=c.id"
+        ).fetchall():
+            if row["supply"] == SUPPLY:
+                continue
+            if row["supply"] != SUPPLY // TOKEN_SCALE:
+                raise ValueError(
+                    "Unsupported token supply; database upgrade was rolled back"
+                )
+            identity = row["id"]
+            db.execute(
+                "UPDATE coins SET tokens=tokens*?,reference=reference/? WHERE id=?",
+                (TOKEN_SCALE, TOKEN_SCALE, identity),
+            )
+            db.execute(
+                "UPDATE holdings SET qty=qty*? WHERE coin=?", (TOKEN_SCALE, identity)
+            )
+            db.execute(
+                "UPDATE trades SET qty=qty*?,price=price/? WHERE coin=?",
+                (TOKEN_SCALE, TOKEN_SCALE, identity),
+            )
+            db.execute(
+                "UPDATE quotes SET qty=qty*?,expires=CASE WHEN result IS NULL THEN 0 ELSE expires END WHERE coin=?",
+                (TOKEN_SCALE, identity),
+            )
+            for quote in db.execute(
+                "SELECT id,result FROM quotes WHERE coin=? AND result IS NOT NULL",
+                (identity,),
+            ).fetchall():
+                value = json.loads(quote["result"])
+                value["qty"] *= TOKEN_SCALE
+                db.execute(
+                    "UPDATE quotes SET result=? WHERE id=?",
+                    (json.dumps(value), quote["id"]),
+                )
+        db.execute(
+            "INSERT INTO meta VALUES('token_supply',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (str(SUPPLY),),
+        )
 
     def _ensure_personalities(self, db, now):
         variants = {
@@ -243,7 +286,7 @@ class Market:
             coin = f"coin-{sequence:08d}"
             symbol = f"{adjective[:2]}{noun[:2]}{sequence:X}".upper()
             seed_cash = rng.randint(1500, 12000) * UNIT
-            pool_tokens = rng.randint(50000, 200000)
+            pool_tokens = rng.randint(50000, 200000) * TOKEN_SCALE
             price = seed_cash / pool_tokens / UNIT
             db.execute(
                 "INSERT INTO coins(id,name,symbol,cash,tokens,reference) VALUES(?,?,?,?,?,?)",
@@ -692,6 +735,7 @@ class Market:
                     "symbol": r["symbol"],
                     "price": p,
                     "circulating_supply": circulation,
+                    "total_supply": SUPPLY,
                     "market_cap": p * circulation,
                     "fdv": p * SUPPLY,
                     "volume_24h": r["volume_24h"] / UNIT,
@@ -807,7 +851,7 @@ class Market:
             last_tick = int(heartbeat[0]) if heartbeat else None
             observed_at = int(time.time())
             return {
-                "api_version": 4,
+                "api_version": 5,
                 "simulation": simulation_status(last_tick, observed_at),
                 "coins": coins,
                 "trades": trades,

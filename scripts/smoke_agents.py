@@ -34,14 +34,14 @@ with sync_playwright() as p:
     page.get_by_role("button", name="Whale watch", exact=True).click()
     page.get_by_role("region", name="Large trades", exact=True).wait_for(timeout=60000)
     state = page.request.get(base + "/api/state").json()
-    assert state["api_version"] == 4
+    assert state["api_version"] == 5
     assert any(t["amount"] >= 1000 * 1e6 for t in state["large_trades"])
     largest = max(state["agents"], key=lambda a: a["biggest_buy"])
     first = page.locator(".whale-watch-trades button").first
     assert first.get_attribute("title")
     page.screenshot(path="/tmp/norx-whale-watch.png", full_page=True)
     first.click()
-    page.get_by_role("heading", name="Make your move").wait_for()
+    page.get_by_role("heading", name="Trade token").wait_for()
     assert page.locator("canvas").count() > 0
     page.get_by_role("link", name="Agents", exact=True).click()
     page.set_viewport_size({"width": 390, "height": 844})

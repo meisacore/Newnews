@@ -9,6 +9,7 @@ import Pulse from "./Pulse";
 import Agents from "./Agents";
 import ActivityDrawer from "./ActivityDrawer";
 import { useCurrency } from "./Currency";
+import { TokenHeader, TokenInfo } from "./TokenWorkspace";
 import { Discover, Activity } from "./Terminal";
 import { ExchangeHeader, ExchangeFooter, Portfolio } from "./ExchangeChrome";
 import "./terminal.css";
@@ -38,7 +39,7 @@ async function api(path, token, body, signal) {
     );
   return data;
 }
-function Chart({ coin, interval, refresh }) {
+function Chart({ coin, interval, refresh, range }) {
   const money = useCurrency();
   const el = useRef();
   const chart = useRef();
@@ -49,7 +50,7 @@ function Chart({ coin, interval, refresh }) {
   const [empty, setEmpty] = useState(true);
   useEffect(() => {
     const c = createChart(el.current, {
-      height: 420,
+      height: 360,
       autoSize: true,
       layout: { background: { color: "#101921" }, textColor: "#90a0ab" },
       grid: {
@@ -78,10 +79,10 @@ function Chart({ coin, interval, refresh }) {
   }, []);
   useEffect(() => {
     fitted.current = false;
-  }, [coin, interval]);
+  }, [coin, interval, range]);
   useEffect(() => {
     let cancelled = false;
-    api(`candles/${coin}?interval=${interval}`)
+    api(`candles/${coin}?interval=${interval}&range_seconds=${range}`)
       .then((data) => {
         if (cancelled) return;
         setError("");
@@ -89,8 +90,8 @@ function Chart({ coin, interval, refresh }) {
         series.current.applyOptions({
           priceFormat: {
             type: "price",
-            precision: money.unit === "ETH" ? 8 : 6,
-            minMove: money.unit === "ETH" ? 0.00000001 : 0.000001,
+            precision: money.unit === "ETH" ? 12 : 8,
+            minMove: money.unit === "ETH" ? 0.000000000001 : 0.00000001,
           },
         });
         series.current.setData(
@@ -110,7 +111,21 @@ function Chart({ coin, interval, refresh }) {
           })),
         );
         if (!fitted.current && data.length) {
-          chart.current.timeScale().fitContent();
+          if (range === 86400)
+            chart.current
+              .timeScale()
+              .setVisibleLogicalRange({
+                from: data.length - 1 - Math.floor(range / interval),
+                to: data.length + 3,
+              });
+          else if (data.length < 40)
+            chart.current
+              .timeScale()
+              .setVisibleLogicalRange({
+                from: data.length - 60,
+                to: data.length + 4,
+              });
+          else chart.current.timeScale().fitContent();
           fitted.current = true;
         }
       })
@@ -120,10 +135,10 @@ function Chart({ coin, interval, refresh }) {
     return () => {
       cancelled = true;
     };
-  }, [coin, interval, refresh, money.unit]);
+  }, [coin, interval, refresh, money.unit, range]);
   return (
     <>
-      <div ref={el} />
+      <div className="chart-canvas" ref={el} />
       {error ? (
         <p className="error">{error}</p>
       ) : empty ? (
@@ -155,6 +170,8 @@ export function App({ auth }) {
     [me, setMe] = useState(null),
     [selected, setSelected] = useState(() => readRoute().coin || ""),
     [interval, setIntervalValue] = useState(60),
+    [range, setRange] = useState(7200),
+    [period, setPeriod] = useState("24h"),
     [side, setSide] = useState("buy"),
     [amount, setAmount] = useState(() => String(money.fromUsd(50))),
     [quote, setQuote] = useState(null),
@@ -272,7 +289,7 @@ export function App({ auth }) {
               (money.unit === "ETH"
                 ? Number(value) / money.rate
                 : Number(value) * money.rate
-              ).toFixed(8),
+              ).toFixed(money.unit === "ETH" ? 12 : 2),
             ),
           ),
         );
@@ -418,74 +435,66 @@ export function App({ auth }) {
         />
       )}
       {route.view === "coin" && coin && (
-        <main className="trading-workspace">
-          <section className="panel">
-            <div className="chart-heading">
-              <div>
-                <h2>
-                  {coin.name}{" "}
-                  <small>
-                    {coin.symbol}/{money.unit}
-                  </small>
-                </h2>
-                <strong className="price">{dollars(coin.price)}</strong>
-              </div>
-              <div className="intervals">
+        <main className="trading-workspace token-workspace">
+          <section className="panel token-left">
+            <TokenHeader coin={coin} period={period} onPeriod={setPeriod} />
+            <div className="token-chart-tools">
+              <div
+                className="intervals"
+                role="group"
+                aria-label="Candle interval"
+              >
                 {[
                   [60, "1m"],
                   [300, "5m"],
+                  [900, "15m"],
                   [3600, "1h"],
-                ].map(([v, label]) => (
+                ].map(([value, label]) => (
                   <button
-                    className={interval === v ? "active" : ""}
-                    key={v}
-                    onClick={() => setIntervalValue(v)}
+                    key={value}
+                    className={interval === value ? "active" : ""}
+                    onClick={() => setIntervalValue(value)}
                   >
                     {label}
                   </button>
                 ))}
               </div>
-            </div>
-            <div className="coin-metrics">
-              <span>
-                24h change{" "}
-                <b className={coin.change_24h >= 0 ? "up" : "down"}>
-                  {coin.change_24h.toFixed(2)}%
-                </b>
-              </span>
-              <span>
-                Pool {money.unit} <b>{dollars(coin.pool_usd)}</b>
-              </span>
-              <span>
-                Holders <b>{coin.holders}</b>
-              </span>
-              <span>
-                Stage <b>{coin.stage}</b>
-              </span>
-            </div>
-            <Chart coin={selected} interval={interval} refresh={refresh} />
-            <div className="stats">
-              <div>
-                Circulating market cap
-                <strong>{dollars(coin.market_cap)}</strong>
+              <div
+                className="chart-range"
+                role="group"
+                aria-label="Chart range"
+              >
+                <button
+                  className={range === 7200 ? "active" : ""}
+                  onClick={() => setRange(7200)}
+                >
+                  2h view
+                </button>
+                <button
+                  className={range === 86400 ? "active" : ""}
+                  title="Show the last 24 hours of available trades"
+                  onClick={() => {
+                    setRange(86400);
+                    setIntervalValue(300);
+                  }}
+                >
+                  24h view
+                </button>
               </div>
-              <div>
-                24h volume<strong>{dollars(coin.volume_24h)}</strong>
-              </div>
-              <div>
-                Circulating supply
-                <strong>{coin.circulating_supply.toLocaleString()}</strong>
-              </div>
+              <span>{money.unit} · Candles</span>
             </div>
-            <p className="muted fine">
-              Candles show fee-exclusive trade prices and {money.unit} volume.
-              The current price is the pool spot price. Market cap is a
-              valuation, not cash invested.
-            </p>
+            <div className="chart-frame">
+              <Chart
+                coin={selected}
+                interval={interval}
+                refresh={refresh}
+                range={range}
+              />
+            </div>
             <Activity state={state} selected={selected} me={me} />
           </section>
           <aside className="panel order-ticket">
-            <h2>Make your move</h2>
+            <h2>Trade token</h2>
             <div className="tabs">
               {["buy", "sell"].map((s) => (
                 <button
@@ -495,6 +504,40 @@ export function App({ auth }) {
                   key={s}
                 >
                   {s}
+                </button>
+              ))}
+            </div>
+            <div className="market-order-label">
+              Market order <span>0.3% fee</span>
+            </div>
+            <div className="ticket-presets">
+              {(side === "buy"
+                ? money.unit === "ETH"
+                  ? [0.01, 0.05, 0.1, 1]
+                  : [25, 50, 250, 1000]
+                : [25, 50, 75, 100]
+              ).map((n) => (
+                <button
+                  key={n}
+                  disabled={busy}
+                  onClick={() => {
+                    setAmount(
+                      String(
+                        side === "buy"
+                          ? n
+                          : Math.floor(
+                              ((me?.holdings[selected] || 0) * n) / 100,
+                            ),
+                      ),
+                    );
+                    setQuote(null);
+                  }}
+                >
+                  {side === "buy"
+                    ? money.unit === "ETH"
+                      ? n + " ETH"
+                      : "$" + n
+                    : n + "%"}
                 </button>
               ))}
             </div>
@@ -537,37 +580,6 @@ export function App({ auth }) {
               Held: {(me?.holdings[selected] || 0).toLocaleString()}{" "}
               {coin.symbol}
             </p>
-            <div className="ticket-presets">
-              {(side === "buy"
-                ? money.unit === "ETH"
-                  ? [0.01, 0.05, 0.1, 1]
-                  : [25, 50, 250, 1000]
-                : [25, 50, 75, 100]
-              ).map((n) => (
-                <button
-                  key={n}
-                  disabled={busy}
-                  onClick={() => {
-                    setAmount(
-                      String(
-                        side === "buy"
-                          ? n
-                          : Math.floor(
-                              ((me?.holdings[selected] || 0) * n) / 100,
-                            ),
-                      ),
-                    );
-                    setQuote(null);
-                  }}
-                >
-                  {side === "buy"
-                    ? money.unit === "ETH"
-                      ? n + " ETH"
-                      : "$" + n
-                    : n + "%"}
-                </button>
-              ))}
-            </div>
             {quote && (
               <div className="quote">
                 <strong>
@@ -617,6 +629,7 @@ export function App({ auth }) {
                 <b>{me ? dollars(me.cash) : "—"}</b>
               </div>
             </div>
+            <TokenInfo coin={coin} />
             <p className="muted fine">
               New accounts receive {money.format(10000)} in virtual funds once.
               Your portfolio is saved when you leave.

@@ -103,7 +103,7 @@ class EconomyTests(unittest.TestCase):
         self.assertLessEqual(c["low"], c["close"])
         self.assertGreaterEqual(c["high"], c["open"])
         state = self.m.state()["coins"][0]
-        self.assertEqual(state["market_cap"], state["price"] * 100000)
+        self.assertEqual(state["market_cap"], state["price"] * 100000000)
         self.assertEqual(state["fdv"], state["price"] * SUPPLY)
         with self.m.transaction() as db:
             db.execute("UPDATE trades SET ts=ts-180 WHERE coin=?", ("frog",))

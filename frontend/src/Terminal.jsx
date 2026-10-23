@@ -295,6 +295,12 @@ export function Activity({ state, selected, me }) {
           >
             My trades
           </button>
+          <button
+            className={tab === "positions" ? "active" : ""}
+            onClick={() => setTab("positions")}
+          >
+            Positions
+          </button>
         </div>
         <select
           aria-label="Filter trades"
@@ -307,38 +313,67 @@ export function Activity({ state, selected, me }) {
         </select>
         <span className="muted">Recent executions</span>
       </div>
-      <div className="table-scroll">
-        <table className="terminal-table">
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Side</th>
-              <th>{money.unit}</th>
-              <th>Tokens</th>
-              <th>Trader</th>
-              <th>Strategy</th>
-            </tr>
-          </thead>
-          <tbody>
-            {trades.map((t) => (
-              <tr key={t.id}>
-                <td>{new Date(t.ts * 1000).toLocaleTimeString()}</td>
-                <td className={t.side === "buy" ? "up" : "down"}>
-                  {t.side.toUpperCase()}
-                </td>
-                <td>{usd(t.amount / 1e6)}</td>
-                <td>{t.qty.toLocaleString()}</td>
-                <td>
-                  {t.agent_name ||
-                    (t.account?.startsWith("agent-") ? t.account : "Player")}
-                </td>
-                <td className="muted">{t.persona || "Manual trade"}</td>
+      {tab === "positions" ? (
+        <div className="token-position-tab">
+          {me ? (
+            <>
+              <div>
+                <span>Tokens held</span>
+                <b>{(me.holdings[selected] || 0).toLocaleString()}</b>
+              </div>
+              <div>
+                <span>Spot value</span>
+                <b>
+                  {usd(
+                    (me.holdings[selected] || 0) *
+                      (state?.coins.find((c) => c.id === selected)?.price || 0),
+                  )}
+                </b>
+              </div>
+              <div>
+                <span>Available {money.unit}</span>
+                <b>{usd(me.cash)}</b>
+              </div>
+              <a href="#portfolio">View portfolio ↗</a>
+            </>
+          ) : (
+            <p className="muted">Sign in to see your saved position.</p>
+          )}
+        </div>
+      ) : (
+        <div className="table-scroll">
+          <table className="terminal-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Side</th>
+                <th>{money.unit}</th>
+                <th>Tokens</th>
+                <th>Trader</th>
+                <th>Strategy</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {!trades.length && (
+            </thead>
+            <tbody>
+              {trades.map((t) => (
+                <tr key={t.id}>
+                  <td>{new Date(t.ts * 1000).toLocaleTimeString()}</td>
+                  <td className={t.side === "buy" ? "up" : "down"}>
+                    {t.side.toUpperCase()}
+                  </td>
+                  <td>{usd(t.amount / 1e6)}</td>
+                  <td>{t.qty.toLocaleString()}</td>
+                  <td>
+                    {t.agent_name ||
+                      (t.account?.startsWith("agent-") ? t.account : "Player")}
+                  </td>
+                  <td className="muted">{t.persona || "Manual trade"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {tab !== "positions" && !trades.length && (
         <p className="empty-market">
           {tab === "mine" && !me
             ? "Sign in to see your executions."

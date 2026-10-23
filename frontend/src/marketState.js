@@ -1,8 +1,9 @@
 export function validateMarketState(data) {
   if (
-    data?.api_version !== 4 ||
+    data?.api_version !== 5 ||
     !Array.isArray(data.coins) ||
     !Array.isArray(data.screener) ||
+    !data.coins.every((c) => c.total_supply === 1000000000) ||
     !["5m", "1h", "6h", "24h"].every(
       (w) =>
         Number.isFinite(data.market_totals?.[w]?.volume) &&

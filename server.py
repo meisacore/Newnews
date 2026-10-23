@@ -96,10 +96,12 @@ def me(user=Depends(identity)):
 
 
 @app.get("/api/candles/{coin}")
-def candles(coin: str, interval: int = 60):
-    if interval not in (60, 300, 3600):
+def candles(coin: str, interval: int = 60, range_seconds: int = 7200):
+    if interval not in (60, 300, 900, 3600):
         raise HTTPException(400, "Unsupported candle interval")
-    return market.candles(coin, interval)
+    if range_seconds not in (7200, 86400):
+        raise HTTPException(400, "Unsupported chart range")
+    return market.candles(coin, interval, limit=range_seconds // interval + 1)
 
 
 class Quote(BaseModel):

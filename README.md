@@ -83,7 +83,7 @@ consistent database snapshot (use SQLite's backup API, not a live file copy).
 
 ## Market rules
 
-- Three initial coins: FROG, RCKT, PBL. Each has fixed supply of 1,000,000 tokens.
+- Three initial coins: FROG, RCKT, PBL. Each has fixed total supply of 1,000,000,000 tokens.
 - The worker launches **five random coins every 60 seconds**, starting one minute
   after initialization/upgrade. Names, unique symbols, initial pool USD ($1,500–$12,000),
   and circulating pool tokens (50,000–200,000) vary. Every coin has independent
@@ -380,7 +380,7 @@ Price changes compare the current pool spot with the last execution at/before
 the window start, falling back to the first known execution for younger coins;
 unknown history shows a dash. The totals cover all markets; the table covers
 the current feed plus leading active markets from each window. Market data
-uses API version 4 so an older backend reports that it needs restarting rather
+uses API version 5 so an older backend reports that it needs restarting rather
 than silently omitting the screener statistics.
 
 Whale watch is a separate panel opened from the wave icon in the header or the
@@ -405,3 +405,33 @@ persistence, an actual 0.1 ETH virtual buy and token sale, and five mobile route
 Restart both servers after updating; preserve the existing data directory.
 
 [View the Discover screener](docs/discover-preview.png).
+
+### Unified token terminal and one-billion supply
+
+The token page uses a compact identity/liquidity/period header over the chart
+and scrolling trade tape, with a separate trade ticket and token-info column.
+Candle sizes are 1m/5m/15m/1h. The independent 24h view requests a full day of
+available candles, rather than just changing a label; it defaults to 5m candles
+and supports finer/coarser choices. New markets show only real available trades.
+Positions shows the signed-in player's actual balance and spot value.
+
+Every live-engine token has a total supply of **1 billion**. On upgrade, each
+legacy one-million token undergoes a 1,000-for-1 denomination change: pool and
+holding quantities and historical trade quantities multiply by 1,000; spot,
+reference and historical execution prices divide by 1,000. USD account and pool
+balances, fees, trade amounts, ownership shares, market caps, and historical
+volume stay unchanged. Cached completed-quote results scale their quantities
+for idempotent replays; unexecuted quotes expire and must be previewed again.
+The transaction validates actual per-coin supply, rolls back unsupported totals,
+and does not rescale an already upgraded coin. New coins allocate 50–200 million
+tokens to their initial pool; the remaining supply stays in treasury.
+
+**Stop the existing backend and any standalone worker before updating/restarting.**
+Keep the existing data directory. The backend upgrades the database automatically.
+API version 5 detects an older backend instead of displaying stale supply data.
+`test_supply.py` verifies supply, value/history conservation, replay handling and
+rollback. The API tests verify actual day-long candle coverage.
+`scripts/smoke_token.py` checks the token terminal, 24h/15m controls, supply info,
+USD/ETH input round trips, a real virtual buy, positions and mobile layout.
+
+[View the token terminal](docs/token-preview.png).

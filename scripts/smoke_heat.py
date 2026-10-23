@@ -41,7 +41,7 @@ with sync_playwright() as p:
     page.get_by_label("Search markets").fill(chosen["symbol"])
     page.locator(".screener-token").filter(has_text=chosen["symbol"]).first.click()
     assert page.url.endswith("#coin/" + chosen["id"])
-    page.get_by_role("heading", name="Make your move", exact=True).wait_for()
+    page.get_by_role("heading", name="Trade token", exact=True).wait_for()
     page.get_by_role("link", name="Discover", exact=True).click()
     page.get_by_role("button", name="Trending", exact=True).click()
     page.locator(".screener-table tbody tr").first.wait_for()
