@@ -161,16 +161,22 @@ class Market:
             "noise": ("retail_noise", "gambler"),
         }
         counts = dict.fromkeys(variants, 0)
+        missing = []
         for agent in db.execute(
-            "SELECT id,strategy FROM accounts WHERE kind='agent' ORDER BY id"
+            "SELECT a.id,a.strategy,p.account AS persona_account FROM accounts a LEFT JOIN agent_personas p ON p.account=a.id WHERE a.kind='agent' ORDER BY a.id"
         ).fetchall():
             strategy = agent["strategy"] if agent["strategy"] in variants else "noise"
             choices = variants[strategy]
             persona = choices[counts[strategy] % len(choices)]
             counts[strategy] += 1
-            db.execute(
-                "INSERT OR IGNORE INTO agent_personas(account,name,persona) VALUES(?,?,?)",
-                (agent["id"], agent["id"].replace("agent-", "Trader "), persona),
+            if agent["persona_account"] is None:
+                missing.append(
+                    (agent["id"], agent["id"].replace("agent-", "Trader "), persona)
+                )
+        if missing:
+            db.executemany(
+                "INSERT INTO agent_personas(account,name,persona) VALUES(?,?,?)",
+                missing,
             )
         for identity, name, persona, dollars in WEALTHY_ENTRANTS:
             policy = PERSONALITIES[persona]
@@ -198,9 +204,11 @@ class Market:
     def _ensure_crowd(self, db, now):
         # Stable entrants, independent finite balances, one grant per identity.
         # Reopening an existing world never tops up or resets a trader.
-        count = db.execute(
-            "SELECT COUNT(*) FROM accounts WHERE kind='agent'"
-        ).fetchone()[0]
+        existing = {
+            row[0] for row in db.execute("SELECT id FROM accounts WHERE kind='agent'")
+        }
+        count = len(existing)
+        accounts, grants, profiles = [], [], []
         rng = random.Random("norx-crowd-v1")
         personas = list(PERSONALITIES)
         weights = [10, 10, 5, 20, 15, 1, 39]
@@ -218,8 +226,9 @@ class Market:
                 else rng.randint(50000, 150000)
             )
             policy = PERSONALITIES[persona]
-            created = db.execute(
-                "INSERT OR IGNORE INTO accounts VALUES(?,?,?,?,?,?)",
+            if identity in existing:
+                continue
+            accounts.append(
                 (
                     identity,
                     dollars * UNIT,
@@ -227,19 +236,23 @@ class Market:
                     policy.strategy,
                     policy.exposure,
                     policy.activation,
-                ),
+                )
             )
-            if not created.rowcount:
-                continue
-            db.execute(
-                "INSERT INTO agent_grants VALUES(?,?,?)",
-                (identity, dollars * UNIT, now),
+            grants.append((identity, dollars * UNIT, now))
+            profiles.append(
+                (identity, f"Trader {index + 36:04}", persona, rng.randint(0, 20))
             )
-            db.execute(
-                "INSERT INTO agent_personas(account,name,persona,next_tick) VALUES(?,?,?,?)",
-                (identity, f"Trader {index + 36:04}", persona, rng.randint(0, 20)),
-            )
+            existing.add(identity)
             count += 1
+        # Initialization already holds the world write lock. Batch new entrants
+        # rather than making thousands of network round trips to PostgreSQL.
+        if accounts:
+            db.executemany("INSERT INTO accounts VALUES(?,?,?,?,?,?)", accounts)
+            db.executemany("INSERT INTO agent_grants VALUES(?,?,?)", grants)
+            db.executemany(
+                "INSERT INTO agent_personas(account,name,persona,next_tick) VALUES(?,?,?,?)",
+                profiles,
+            )
 
     def _launch_due(self, db, rng, now):
         due = int(
@@ -764,6 +777,7 @@ class Market:
             hot_coins = []
             screener = []
             counts = {"new": 0, "stretch": 0, "migrated": 0}
+            candidates = []
             for r in rows:
                 p = r["cash"] / r["tokens"] / UNIT
                 circulation = SUPPLY - r["treasury_qty"]
@@ -810,42 +824,53 @@ class Market:
                     "heat_score": recent.get(r["id"], {}).get("score", 0),
                 }
                 value["windows"] = {}
-                for label, seconds in (
-                    ("5m", 300),
-                    ("1h", 3600),
-                    ("6h", 21600),
-                    ("24h", 86400),
-                ):
-                    stats = window_stats[label].get(r["id"], {})
-                    baseline = db.execute(
-                        "SELECT price FROM trades WHERE coin=? AND ts<=? ORDER BY ts DESC,id DESC LIMIT 1",
-                        (r["id"], now - seconds),
-                    ).fetchone()
-                    if not baseline:
-                        baseline = db.execute(
-                            "SELECT price FROM trades WHERE coin=? AND ts>? AND ts<=? ORDER BY ts,id LIMIT 1",
-                            (r["id"], now - seconds, now),
-                        ).fetchone()
-                    value["windows"][label] = {
-                        "volume": stats.get("volume", 0) / UNIT,
-                        "txns": stats.get("txns", 0),
-                        "traders": stats.get("traders", 0),
-                        "buy_usd": stats.get("buys", 0) / UNIT,
-                        "sell_usd": stats.get("sells", 0) / UNIT,
-                        "buyers": stats.get("buyers", 0),
-                        "buys": stats.get("buy_count", 0),
-                        "sells": stats.get("sell_count", 0),
-                        "heat": stats.get("score", 0),
-                        "change": (p / baseline[0] - 1) * 100
-                        if baseline and baseline[0]
-                        else None,
-                    }
+                candidates.append(value)
                 if value["in_feed"] or value["id"] in hot_ids:
                     screener.append(value)
                 if value["in_feed"] or value["id"] == selected:
                     coins.append(value)
                 if value["id"] in hot_ids:
                     hot_coins.append(value)
+            # Four bounded database round trips, instead of two lookups per
+            # coin and period. Each subquery uses the existing (coin, ts) index.
+            if candidates:
+                identities = [value["id"] for value in candidates]
+                placeholders = ",".join("?" for _ in identities)
+                for label, seconds in (
+                    ("5m", 300),
+                    ("1h", 3600),
+                    ("6h", 21600),
+                    ("24h", 86400),
+                ):
+                    baselines = {
+                        row["id"]: row["price"]
+                        for row in db.execute(
+                            "SELECT c.id, COALESCE("
+                            "(SELECT price FROM trades WHERE coin=c.id AND ts<=? ORDER BY ts DESC,id DESC LIMIT 1),"
+                            "(SELECT price FROM trades WHERE coin=c.id AND ts>? AND ts<=? ORDER BY ts,id LIMIT 1)"
+                            ") AS price FROM coins c WHERE c.id IN ("
+                            + placeholders
+                            + ")",
+                            (now - seconds, now - seconds, now, *identities),
+                        )
+                    }
+                    for value in candidates:
+                        stats = window_stats[label].get(value["id"], {})
+                        baseline = baselines.get(value["id"])
+                        value["windows"][label] = {
+                            "volume": stats.get("volume", 0) / UNIT,
+                            "txns": stats.get("txns", 0),
+                            "traders": stats.get("traders", 0),
+                            "buy_usd": stats.get("buys", 0) / UNIT,
+                            "sell_usd": stats.get("sells", 0) / UNIT,
+                            "buyers": stats.get("buyers", 0),
+                            "buys": stats.get("buy_count", 0),
+                            "sells": stats.get("sell_count", 0),
+                            "heat": stats.get("score", 0),
+                            "change": (value["price"] / baseline - 1) * 100
+                            if baseline
+                            else None,
+                        }
             names = {
                 row["account"]: dict(row)
                 for row in db.execute("SELECT * FROM agent_personas")

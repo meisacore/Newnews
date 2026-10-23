@@ -7,6 +7,7 @@ import time
 import tempfile
 import unittest
 import uuid
+import random
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
@@ -235,6 +236,33 @@ class PostgresTests(unittest.TestCase):
             self.assertEqual(
                 db.raw.execute("SHOW statement_timeout").fetchone()[0], "30s"
             )
+
+    def test_saved_market_startup_and_feed_have_bounded_round_trips(self):
+        from storage import PostgresConnection
+
+        market = Market(self.target)
+        with market.transaction() as db:
+            for i in range(30):
+                db.execute("UPDATE meta SET value='0' WHERE key='next_launch_at'")
+                market._launch_due(db, random.Random(i), 100000 + i * 60)
+        queries = []
+        original = PostgresConnection.execute
+
+        def measured(db, query, params=()):
+            queries.append(query)
+            return original(db, query, params)
+
+        with patch.object(PostgresConnection, "execute", measured):
+            reopened = Market(self.target)
+        profile_inserts = [
+            q for q in queries if "INSERT" in q and "agent_personas" in q
+        ]
+        self.assertLessEqual(len(profile_inserts), 6)
+        queries.clear()
+        with patch.object(PostgresConnection, "execute", measured):
+            state = reopened.state("frog")
+        self.assertEqual(state["total_coins"], 153)
+        self.assertLess(len(queries), 30)
 
     def test_api_uses_postgres_and_private_rls_tables(self):
         from fastapi.testclient import TestClient

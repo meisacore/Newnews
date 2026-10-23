@@ -19,7 +19,12 @@ DEFAULT_APP_ID = json.loads((Path(__file__).parent / "app-config.json").read_tex
     "privy_app_id"
 ]
 
-market = Market(database_path())
+startup_path = database_path()
+logging.getLogger("uvicorn.error").info(
+    "NORX: opening saved market in %s", startup_path
+)
+market = Market(startup_path)
+logging.getLogger("uvicorn.error").info("NORX: saved market ready; starting API")
 worlds = {}
 runners = {}
 world_lock = threading.Lock()

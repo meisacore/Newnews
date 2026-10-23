@@ -1,4 +1,6 @@
 import tempfile
+import random
+from contextlib import contextmanager
 import unittest
 from unittest.mock import patch
 from economy import Market, UNIT
@@ -22,6 +24,25 @@ class ScreenerTests(unittest.TestCase):
                 qty=amount if side == "sell" else None,
             )
             self.market.execute(who, q["id"], key)
+
+    def test_feed_query_count_stays_bounded_as_coins_grow(self):
+        with self.market.transaction() as db:
+            for i in range(30):
+                db.execute("UPDATE meta SET value='0' WHERE key='next_launch_at'")
+                self.market._launch_due(db, random.Random(i), 100000 + i * 60)
+        queries = []
+        original = self.market.connection
+
+        @contextmanager
+        def measured():
+            with original() as db:
+                db.set_trace_callback(queries.append)
+                yield db
+
+        with patch.object(self.market, "connection", measured):
+            state = self.market.state("frog")
+        self.assertEqual(state["total_coins"], 153)
+        self.assertLess(len(queries), 30)
 
     def test_windows_count_actual_trades_and_keep_periods_distinct(self):
         now = 100000

@@ -122,6 +122,11 @@ class PostgresConnection:
             return InsertResult(cursor.fetchone()[0], cursor.rowcount)
         return self.raw.execute(query, params)
 
+    def executemany(self, query, params):
+        cursor = self.raw.cursor()
+        cursor.executemany(query.replace("?", "%s"), params)
+        return cursor
+
     def executescript(self, script):
         self.execute("BEGIN IMMEDIATE")
         for statement in script.split(";"):

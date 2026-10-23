@@ -1,4 +1,5 @@
 import tempfile
+from contextlib import contextmanager
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -11,6 +12,23 @@ class CrowdTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.path = Path(self.tmp.name) / "world.sqlite3"
         self.market = Market(self.path)
+
+    def test_reopen_does_not_reinsert_every_saved_persona(self):
+        queries = []
+        original = Market.connection
+
+        @contextmanager
+        def measured(market):
+            with original(market) as db:
+                db.set_trace_callback(queries.append)
+                yield db
+
+        with patch.object(Market, "connection", measured):
+            Market(self.path)
+        profile_inserts = [
+            q for q in queries if "INSERT" in q and "agent_personas" in q
+        ]
+        self.assertLessEqual(len(profile_inserts), 6)
 
     def test_upgrade_from_36_traders_retains_accounts_and_funds_new_traders_once(self):
         account = self.market.account("alice")
