@@ -11,7 +11,10 @@ const valid = () => ({
   simulation: { running: true, last_tick_at: 1000 },
 });
 test("old backend response is rejected instead of displaying empty Pulse", () => {
-  assert.throws(() => validateMarketState({...valid(),api_version:2}), /backend is out of date/);
+  assert.throws(
+    () => validateMarketState({ ...valid(), api_version: 2 }),
+    /backend is out of date/,
+  );
   assert.throws(
     () => validateMarketState({ coins: [{ id: "frog", price: 0.2 }] }),
     /backend is out of date/,
@@ -34,4 +37,21 @@ test("partial migrations and missing scheduling metadata are rejected", () => {
     edit(data);
     assert.throws(() => validateMarketState(data), /backend is out of date/);
   }
+});
+
+test("a late tick is updating, while a genuinely stopped simulation stays paused", async () => {
+  const { simulationDisplay } = await import("./marketState.js");
+  assert.equal(
+    simulationDisplay({ running: true, status: "delayed" }).label,
+    "Updating…",
+  );
+  assert.equal(
+    simulationDisplay({ running: false, status: "paused" }).label,
+    "Simulation paused",
+  );
+  assert.equal(
+    simulationDisplay({ running: true, status: "live" }).label,
+    "Live simulation",
+  );
+  assert.equal(simulationDisplay({ running: true }).status, "live");
 });

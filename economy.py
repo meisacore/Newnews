@@ -8,6 +8,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
+from health import simulation_status
 from personalities import PERSONALITIES, WEALTHY_ENTRANTS, intention
 
 UNIT = 1_000_000  # integer millionths of a dollar
@@ -413,10 +414,6 @@ class Market:
         now = int(time.time()) if now is None else int(now)
         with self.transaction() as db:
             self._launch_due(db, rng, now)
-            db.execute(
-                "INSERT INTO meta VALUES('last_tick_at', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                (str(now),),
-            )
             tick = (
                 int(db.execute("SELECT value FROM meta WHERE key='tick'").fetchone()[0])
                 + 1
@@ -473,6 +470,13 @@ class Market:
             db.execute(
                 "DELETE FROM quotes WHERE result IS NULL AND expires<?",
                 (int(time.time()) - 3600,),
+            )
+
+            # Timestamp the successful completion, not the beginning of a possibly
+            # expensive tick. Failures still roll back and leave the old heartbeat.
+            db.execute(
+                "INSERT INTO meta VALUES('last_tick_at', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (str(int(time.time())),),
             )
 
     def _agent_decision(self, db, agent, coin, rng):
@@ -651,12 +655,10 @@ class Market:
                 "SELECT value FROM meta WHERE key='last_tick_at'"
             ).fetchone()
             last_tick = int(heartbeat[0]) if heartbeat else None
+            observed_at = int(time.time())
             return {
                 "api_version": 3,
-                "simulation": {
-                    "running": last_tick is not None and 0 <= now - last_tick <= 10,
-                    "last_tick_at": last_tick,
-                },
+                "simulation": simulation_status(last_tick, observed_at),
                 "coins": coins,
                 "trades": trades,
                 "large_trades": large_trades,
@@ -672,7 +674,7 @@ class Market:
                         "SELECT value FROM meta WHERE key='next_launch_at'"
                     ).fetchone()[0]
                 ),
-                "server_time": now,
+                "server_time": observed_at,
                 "launch_batch": LAUNCH_BATCH,
             }
 

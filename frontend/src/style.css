@@ -1159,3 +1159,278 @@ body {
     max-width: 230px;
   }
 }
+
+/* Native scrollbars use NORX navy and aged gold on Windows, Chromium and Firefox. */
+:root {
+  --scroll-track: #0b161f;
+  --scroll-thumb: #786d55;
+  --scroll-hover: #bba477;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) var(--scroll-track);
+}
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: var(--scroll-track);
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border: 1px solid var(--scroll-track);
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-hover);
+}
+*::-webkit-scrollbar-corner {
+  background: var(--scroll-track);
+}
+*::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+.whale-watch-trades,
+.pulse-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) var(--scroll-track);
+  overscroll-behavior: contain;
+}
+.whale-watch-trades {
+  padding-bottom: 6px;
+  scroll-snap-type: x proximity;
+}
+.whale-watch-trades > button {
+  scroll-snap-align: start;
+}
+.watch-arrows {
+  display: flex;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.watch-arrows button {
+  width: 27px;
+  height: 34px;
+  padding: 0;
+  background: #13202a;
+  color: #d6bf91;
+  border: 1px solid #544b36;
+  border-radius: 5px;
+  font-size: 23px;
+  line-height: 1;
+}
+.watch-arrows button:disabled {
+  opacity: 0.28;
+}
+.feed-status[data-status="delayed"] i,
+.feed-status[data-status="connecting"] i {
+  background: #c9b48c;
+  box-shadow: 0 0 7px #c9b48c44;
+}
+.feed-status[data-status="paused"] i,
+.feed-status[data-status="offline"] i {
+  background: #a2817d;
+  box-shadow: none;
+}
+.column-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid #24313b;
+  background: #0c1720;
+}
+.column-presets,
+.column-options {
+  display: flex;
+  gap: 5px;
+}
+.column-tools button {
+  font-size: 9px;
+  padding: 5px 7px;
+  border-radius: 4px;
+  background: #14212a;
+  color: #91a4b1;
+  border: 1px solid #293b46;
+}
+.column-presets button {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+.column-presets small {
+  font-size: 8px;
+  color: #687f8f;
+}
+.column-presets button.selected {
+  background: #393323;
+  color: #e0c99d;
+  border-color: #716344;
+}
+.column-presets button.selected small {
+  color: #c9b48c;
+}
+.column-options .has-filters {
+  color: #dfc797;
+  border-color: #726445;
+}
+.column-held {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: #322c1d99;
+  color: #cab78e;
+  border-bottom: 1px solid #4c4431;
+  padding: 7px 13px;
+  font-size: 9px;
+}
+.column-held button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: #e4cb97;
+  font-size: 10px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.column-filters {
+  padding: 14px;
+  background: #101e29;
+  border-bottom: 1px solid #43503e;
+}
+.filter-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 11px;
+}
+.filter-heading strong {
+  font-size: 11px;
+  font-weight: 500;
+  color: #cfbd97;
+}
+.filter-heading button {
+  font-size: 10px;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: #91a5b6;
+}
+.filter-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.filter-fields label {
+  font-size: 9px;
+  color: #8fa5b5;
+  line-height: 1.5;
+  margin: 0;
+}
+.filter-fields input {
+  font-size: 12px;
+  border: 1px solid #314654;
+  border-radius: 4px;
+  padding: 7px;
+  margin-top: 5px;
+  background: #0b161f;
+  min-width: 0;
+}
+.pulse-scroll {
+  height: clamp(350px, calc(100vh - 445px), 700px);
+}
+@media (max-width: 1050px) and (min-width: 701px) {
+  .column-tools {
+    padding: 8px 6px;
+    gap: 4px;
+  }
+  .column-tools button {
+    padding: 5px;
+    font-size: 8px;
+  }
+  .column-presets small {
+    display: none;
+  }
+  .column-options {
+    gap: 3px;
+  }
+  .watch-arrows {
+    flex-direction: column;
+  }
+  .watch-arrows button {
+    height: 23px;
+    width: 24px;
+    font-size: 19px;
+  }
+}
+@media (max-width: 700px) {
+  .watch-arrows {
+    flex-direction: column;
+    gap: 3px;
+  }
+  .watch-arrows button {
+    height: 24px;
+    width: 22px;
+    font-size: 19px;
+  }
+  .whale-watch {
+    gap: 7px;
+  }
+  .whale-watch-title strong {
+    font-size: 10px;
+  }
+  .whale-watch-title small {
+    font-size: 7px;
+  }
+  .pulse-scroll {
+    height: 500px;
+  }
+  .column-tools {
+    padding: 9px 13px;
+  }
+  .column-held {
+    font-size: 10px;
+  }
+  .column-options button {
+    font-size: 10px;
+  }
+}
+/* Reserve the arrivals strip so entering a column never moves a card under the pointer. */
+.column-held {
+  min-height: 27px;
+  background: #0d1821;
+  border-color: #24313b;
+  color: #748b9b;
+}
+.column-held.is-held {
+  background: #322c1d99;
+  border-color: #4c4431;
+  color: #cab78e;
+}
+.pulse-scroll {
+  scrollbar-gutter: stable;
+}
+/* Filters float above cards, keeping the three column footers aligned. */
+.column-tools {
+  position: relative;
+  z-index: 3;
+}
+.column-filters {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  border: 1px solid #4b503e;
+  border-radius: 0 0 7px 7px;
+  box-shadow: 0 14px 28px #02080fcf;
+}
+.column-options svg {
+  display: block;
+}

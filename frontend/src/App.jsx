@@ -15,9 +15,10 @@ const dollars = (n) =>
     currency: "USD",
     maximumFractionDigits: n < 1 ? 5 : 2,
   }).format(n || 0);
-async function api(path, token, body) {
+async function api(path, token, body, signal) {
   const r = await fetch("/api/" + path, {
     cache: "no-store",
+    signal,
     headers: {
       ...(token ? { Authorization: "Bearer " + token } : {}),
       ...(body ? { "Content-Type": "application/json" } : {}),
@@ -143,21 +144,61 @@ export function App({ auth }) {
     [notice, setNotice] = useState(""),
     [refresh, setRefresh] = useState(0);
   const session = useRef(0);
-  async function load() {
-    const data = validateMarketState(
-      await api("state?selected=" + encodeURIComponent(selected)),
-    );
-    setFeedError("");
-    setState({ ...data, receivedAt: Date.now() });
-    setRefresh((v) => v + 1);
+  const feedRequest = useRef(0);
+  const feedSelection = useRef(selected);
+  feedSelection.current = selected;
+  async function load(signal) {
+    if (selected !== feedSelection.current) return;
+    const request = ++feedRequest.current;
+    try {
+      const data = validateMarketState(
+        await api(
+          "state?selected=" + encodeURIComponent(selected),
+          undefined,
+          undefined,
+          signal,
+        ),
+      );
+      if (
+        signal?.aborted ||
+        request !== feedRequest.current ||
+        selected !== feedSelection.current
+      )
+        return;
+      setFeedError("");
+      setState({ ...data, receivedAt: Date.now() });
+      setRefresh((v) => v + 1);
+    } catch (error) {
+      if (
+        signal?.aborted ||
+        request !== feedRequest.current ||
+        selected !== feedSelection.current
+      )
+        return;
+      throw error;
+    }
   }
   useEffect(() => {
-    load().catch((e) => setFeedError(e.message));
-    const timer = setInterval(
-      () => load().catch((e) => setFeedError(e.message)),
-      3000,
-    );
-    return () => clearInterval(timer);
+    let stopped = false,
+      timer,
+      controller;
+    async function poll() {
+      controller = new AbortController();
+      try {
+        await load(controller.signal);
+      } catch (error) {
+        if (!stopped) setFeedError(error.message);
+      }
+      // Slow responses must finish before another poll starts. This prevents
+      // overlapping snapshots from moving the feed or heartbeat backwards.
+      if (!stopped) timer = setTimeout(poll, 3000);
+    }
+    poll();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      controller?.abort();
+    };
   }, [selected]);
   useEffect(() => {
     const update = () => {

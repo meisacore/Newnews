@@ -214,3 +214,40 @@ The personality browser check is `scripts/smoke_agents.py`: it verifies the
 36-agent dashboard, one-time grant labels, naturally occurring large trades,
 Whale watch navigation into the chart, and mobile layout. It does not inject
 fake trades. Set `NORX_TEST_URL` and `BROWSER_EXECUTABLE` as needed.
+
+## Pulse controls and simulation status
+
+The uploaded reference docs inform the Pulse interactions; NORX keeps its starry
+navy/gold design, virtual USD, fictional launches, AMM, and agent personalities.
+Each column now has P1/P2/P3 buy-ticket presets ($25/$50/$250), independent sorting
+and filters for USD market cap, USD volume, holders, and token age. Preferences
+stay in the browser. A preset prepares the existing trade ticket and its quote;
+it does not bypass confirmation or execution limits. Missing figures fail an
+active numeric filter rather than being treated as zero.
+
+Hovering a column or scrolling its list temporarily holds its cards and displayed
+figures. The hold control can pin that view; Resume releases waiting arrivals.
+This affects the display only: the simulation, Whale watch, and execution quotes
+continue updating. The reserved arrivals strip prevents hover from shifting a
+card under the pointer. Filters float over the column to keep its layout aligned.
+All scrollbars use dark navy tracks and muted gold thumbs; Whale watch also has
+keyboard-accessible left/right controls.
+
+Simulation status is based on the **completion** of a successful tick and sampled
+after the database heartbeat is read. This fixes a boundary race where a new tick
+looked newer than the API request's captured clock and was incorrectly shown as
+paused. Heartbeats up to 10 seconds old are Live, 11–30 seconds are Updating,
+and over 30 seconds (or no completed tick) are Paused. A failed transaction does
+not refresh the heartbeat. API polling is sequential and cancels obsolete
+requests so slow responses cannot overwrite newer market state.
+
+Run the additional frontend checks with:
+
+```sh
+node --test frontend/src/marketState.test.js frontend/src/pulseLogic.test.js
+```
+
+`scripts/smoke_pulse_controls.py` uses a controlled UI stream to test slow-response
+polling, held arrivals, independent filters, preset persistence, delayed versus
+paused states, themed scrollbars and mobile layout. It does not submit trades or
+modify the economy. Its screenshots reload the actual market stream separately.

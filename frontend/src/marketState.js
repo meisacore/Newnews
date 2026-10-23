@@ -20,3 +20,17 @@ export function validateMarketState(data) {
   }
   return data;
 }
+
+export function simulationDisplay(simulation) {
+  if (!simulation) return { label: "Connecting", status: "connecting" };
+  const status = simulation.status || (simulation.running ? "live" : "paused");
+  return {
+    status,
+    label:
+      status === "delayed"
+        ? "Updating…"
+        : status === "paused"
+          ? "Simulation paused"
+          : "Live simulation",
+  };
+}
