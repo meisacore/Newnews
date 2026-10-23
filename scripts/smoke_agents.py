@@ -23,7 +23,11 @@ with sync_playwright() as p:
     comet.wait_for()
     assert "Reckless whale" in comet.inner_text()
     assert "$1,500,000 initial grant" in comet.inner_text()
-    assert page.locator(".agent-card").count() == 36
+    assert page.locator(".agent-card").count() <= 40
+    assert "2000" in page.locator(".agent-summary").inner_text()
+    page.get_by_label("Search traders").fill("Comet")
+    assert page.locator(".agent-card").count() == 1
+    page.get_by_label("Search traders").fill("")
     page.screenshot(path="/tmp/norx-agent-personalities.png", full_page=True)
     page.get_by_role("link", name="Pulse", exact=True).click()
     page.get_by_role("region", name="Large trades", exact=True).wait_for(timeout=60000)

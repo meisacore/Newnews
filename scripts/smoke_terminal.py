@@ -61,7 +61,7 @@ with sync_playwright() as p:
     page.get_by_role("heading", name="Pulse", exact=True).wait_for()
     panels = page.locator(".pulse-column")
     assert panels.count() == 3 and all(panels.nth(i).is_visible() for i in range(3))
-    assert page.locator(".pulse-columns").bounding_box()["height"] > 500
+    assert page.locator(".pulse-columns").bounding_box()["height"] > 350
     page.screenshot(path="/tmp/norx-reference-pulse.png")
     for route in ("pulse", "discover", "portfolio", "agents", "coin/frog"):
         page.goto(base + "/market.html#" + route)

@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from economy import Market, UNIT
+from economy import Market, UNIT, TRADER_POPULATION
 from personalities import PERSONALITIES, WEALTHY_ENTRANTS
 
 
@@ -124,7 +124,9 @@ class PersonalityTests(unittest.TestCase):
                 remaining,
             )
             self.assertEqual(
-                db.execute("SELECT COUNT(*) FROM agent_grants").fetchone()[0],
+                db.execute(
+                    "SELECT COUNT(*) FROM agent_grants WHERE account LIKE 'agent-whale-%'"
+                ).fetchone()[0],
                 len(WEALTHY_ENTRANTS),
             )
 
@@ -180,7 +182,7 @@ class PersonalityTests(unittest.TestCase):
             self.assertGreaterEqual(
                 db.execute("SELECT MIN(cash) FROM accounts").fetchone()[0], 0
             )
-        self.assertEqual(len(self.market.state()["agents"]), 36)
+        self.assertEqual(len(self.market.state()["agents"]), TRADER_POPULATION)
         self.assertTrue(
             any(
                 a["disciplined"] and a["starting_cash"]

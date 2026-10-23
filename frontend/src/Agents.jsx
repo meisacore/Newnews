@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 const usd = (n) =>
   new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -6,22 +6,32 @@ const usd = (n) =>
     maximumFractionDigits: 0,
   }).format((n || 0) / 1e6);
 export default function Agents({ state }) {
-  const agents = [...(state?.agents || [])].sort((a, b) => b.cash - a.cash);
+  const [query, setQuery] = useState(""),
+    [page, setPage] = useState(0);
+  const population = [...(state?.agents || [])].sort((a, b) => b.cash - a.cash);
+  const matching = population.filter((a) =>
+    (a.name + " " + a.personality + " " + a.id)
+      .toLowerCase()
+      .includes(query.toLowerCase()),
+  );
+  const pages = Math.max(1, Math.ceil(matching.length / 40));
+  const current = Math.min(page, pages - 1);
+  const agents = matching.slice(current * 40, current * 40 + 40);
   return (
     <section className="agents-page" aria-label="Agent population">
       <div className="agent-summary">
         <div>
           <small>INDEPENDENT TRADERS</small>
-          <strong>{agents.length}</strong>
+          <strong>{population.length}</strong>
         </div>
         <div>
           <small>AVAILABLE AGENT USD</small>
-          <strong>{usd(agents.reduce((sum, a) => sum + a.cash, 0))}</strong>
+          <strong>{usd(population.reduce((sum, a) => sum + a.cash, 0))}</strong>
         </div>
         <div>
           <small>BIGGEST AGENT BUY</small>
           <strong>
-            {usd(Math.max(0, ...agents.map((a) => a.biggest_buy || 0)))}
+            {usd(Math.max(0, ...population.map((a) => a.biggest_buy || 0)))}
           </strong>
         </div>
       </div>
@@ -31,6 +41,30 @@ export default function Agents({ state }) {
         change their minds, and lose virtual USD. No strategy is guaranteed to
         win.
       </p>
+      <div className="agent-browser">
+        <input
+          aria-label="Search traders"
+          placeholder="Search traders or personalities…"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setPage(0);
+          }}
+        />
+        <span>
+          {matching.length.toLocaleString()} traders · Page {current + 1} of{" "}
+          {pages}
+        </span>
+        <button disabled={current === 0} onClick={() => setPage(current - 1)}>
+          Previous
+        </button>
+        <button
+          disabled={current + 1 >= pages}
+          onClick={() => setPage(current + 1)}
+        >
+          Next
+        </button>
+      </div>
       <div className="agent-grid">
         {agents.map((a) => (
           <article

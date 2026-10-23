@@ -73,7 +73,7 @@ export function ExchangeHeader({ state, me, auth, route, selected, onOpen }) {
           {[
             ["pulse", "Pulse"],
             ["discover", "Discover"],
-            ["coin/" + selected, "Trade"],
+            ["trade", "Trade"],
             ["portfolio", "Portfolio"],
             ["agents", "Agents"],
           ].map(([id, label]) => (

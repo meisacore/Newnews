@@ -9,11 +9,13 @@ export function Discover({ state, onOpen, onBuy, busy }) {
   const [query, setQuery] = useState(""),
     [sort, setSort] = useState("volume_24h"),
     [stage, setStage] = useState("all");
-  const rows = (state?.coins || [])
+  const rows = (
+    stage === "trending" ? state?.trending || [] : state?.coins || []
+  )
     .filter(
       (c) =>
-        c.in_feed !== false &&
-        (stage === "all" || c.stage === stage) &&
+        (stage === "trending" || c.in_feed !== false) &&
+        (stage === "all" || stage === "trending" || c.stage === stage) &&
         (c.name + " " + c.symbol).toLowerCase().includes(query.toLowerCase()),
     )
     .sort((a, b) => (b[sort] || 0) - (a[sort] || 0));
@@ -23,13 +25,17 @@ export function Discover({ state, onOpen, onBuy, busy }) {
         <div className="tabs">
           {[
             ["all", "All markets"],
+            ["trending", "Trending · 5m"],
             ["new", "New launches"],
             ["migrated", "Established"],
           ].map(([id, label]) => (
             <button
               key={id}
               className={stage === id ? "active" : ""}
-              onClick={() => setStage(id)}
+              onClick={() => {
+                setStage(id);
+                setSort(id === "trending" ? "heat_score" : "volume_24h");
+              }}
             >
               {label}
             </button>
@@ -46,6 +52,8 @@ export function Discover({ state, onOpen, onBuy, busy }) {
           value={sort}
           onChange={(e) => setSort(e.target.value)}
         >
+          <option value="heat_score">Hottest buys · 5m</option>
+          <option value="buy_usd_5m">Most buy USD · 5m</option>
           <option value="volume_24h">Highest volume</option>
           <option value="change_24h">Top gainers</option>
           <option value="market_cap">Market cap</option>
@@ -59,6 +67,8 @@ export function Discover({ state, onOpen, onBuy, busy }) {
               <th>Market / USD</th>
               <th>Price</th>
               <th>24h change</th>
+              <th>Buys · 5m</th>
+              <th>Buyers · 5m</th>
               <th>Market cap</th>
               <th>24h volume</th>
               <th>Pool USD</th>
@@ -85,6 +95,13 @@ export function Discover({ state, onOpen, onBuy, busy }) {
                   {c.change_24h >= 0 ? "+" : ""}
                   {c.change_24h.toFixed(2)}%
                 </td>
+                <td className="up">
+                  {usd(c.buy_usd_5m)}
+                  <small className="table-net">
+                    Net {usd((c.buy_usd_5m || 0) - (c.sell_usd_5m || 0))}
+                  </small>
+                </td>
+                <td>{c.buyers_5m || 0}</td>
                 <td>{usd(c.market_cap)}</td>
                 <td>{usd(c.volume_24h)}</td>
                 <td>{usd(c.pool_usd)}</td>
@@ -111,8 +128,8 @@ export function Discover({ state, onOpen, onBuy, busy }) {
         </p>
       )}
       <div className="table-caption">
-        {rows.length} markets in the current feed · USD valuations · Select a
-        market to open its chart
+        {rows.length} markets · Trending ranks five-minute buy USD, distinct
+        buyers and buy/sell trade share. Select a market to open its chart
       </div>
     </section>
   );

@@ -1668,3 +1668,145 @@ a:hover {
   background: #d8b679;
   box-shadow: none;
 }
+.market-picker-note {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0 0 16px;
+}
+.table-net {
+  display: block;
+  color: var(--muted);
+  font-size: 9px;
+  margin-top: 4px;
+}
+.hot-markets {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  min-height: 66px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  background: #111315dd;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+.hot-markets-label {
+  min-width: 110px;
+}
+.hot-markets-label strong {
+  font-size: 12px;
+  color: var(--green);
+}
+.hot-markets-label small {
+  display: block;
+  margin-top: 5px;
+  font-size: 9px;
+  color: var(--muted);
+}
+.hot-market-scroll {
+  display: flex;
+  gap: 8px;
+  overflow: auto;
+  min-width: 0;
+  flex: 1;
+  scrollbar-width: thin;
+}
+.hot-market-scroll > button {
+  min-width: 210px;
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  text-align: left;
+  background: #1a1d20;
+  border: 1px solid #2b3035;
+  padding: 7px 10px;
+  border-radius: 5px;
+}
+.hot-market-scroll b {
+  font-size: 11px;
+}
+.hot-market-scroll small {
+  display: block;
+  color: var(--muted);
+  font-size: 9px;
+  margin-top: 4px;
+}
+.hot-rank {
+  font-size: 10px;
+  color: #697c71;
+}
+.hot-flow {
+  margin-left: auto;
+  font-size: 11px;
+  text-align: right;
+}
+.hot-markets > a {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.hot-market-scroll > p {
+  font-size: 11px;
+}
+.agent-browser {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 14px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.agent-browser input {
+  font-size: 12px;
+  max-width: 340px;
+  margin-right: auto;
+  border: 1px solid var(--line);
+  background: #191c1f;
+  padding: 10px 12px;
+  border-radius: 6px;
+}
+.agent-browser button {
+  font-size: 11px;
+  padding: 8px 12px;
+}
+@media (max-width: 700px) {
+  .hot-markets {
+    padding: 7px 9px;
+    gap: 8px;
+  }
+  .hot-markets-label {
+    min-width: 80px;
+  }
+  .hot-markets-label strong {
+    font-size: 11px;
+  }
+  .hot-markets-label small {
+    max-width: 75px;
+    line-height: 1.5;
+    font-size: 8px;
+  }
+  .hot-markets > a {
+    display: none;
+  }
+  .agent-browser {
+    flex-wrap: wrap;
+  }
+  .agent-browser input {
+    max-width: none;
+    width: 100%;
+  }
+  .agent-browser span {
+    margin-right: auto;
+  }
+  .hot-market-scroll > button {
+    min-width: 195px;
+  }
+}
+.hot-markets-label strong,
+.hot-markets > a {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}

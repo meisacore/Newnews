@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { simulationDisplay } from "./marketState";
 import PulseColumn from "./PulseColumn";
+import HotMarkets from "./HotMarkets";
 
 const compact = (n) =>
   new Intl.NumberFormat("en-US", {
@@ -176,6 +177,7 @@ export default function Pulse({ state, feedError, busy, onOpen, onBuy }) {
           </div>
         </section>
       )}
+      <HotMarkets state={state} onOpen={onOpen} />
       <div className="pulse-mobile-tabs">
         {stages.map((s) => (
           <button

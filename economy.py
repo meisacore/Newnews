@@ -17,6 +17,8 @@ SUPPLY = 1_000_000
 LAUNCH_INTERVAL = 60
 LAUNCH_BATCH = 5
 PULSE_LIMIT = 60
+TRADER_POPULATION = 2000
+DECISIONS_PER_TICK = 256
 
 
 class Market:
@@ -31,6 +33,8 @@ class Market:
             CREATE TABLE IF NOT EXISTS coins(id TEXT PRIMARY KEY, name TEXT, symbol TEXT, cash INTEGER CHECK(cash>0), tokens INTEGER CHECK(tokens>0), reference REAL, momentum REAL DEFAULT 0);
             CREATE TABLE IF NOT EXISTS trades(id INTEGER PRIMARY KEY, ts INTEGER, account TEXT, coin TEXT, side TEXT, qty INTEGER, amount INTEGER, price REAL, reason TEXT);
             CREATE INDEX IF NOT EXISTS trade_time ON trades(coin,ts);
+            CREATE INDEX IF NOT EXISTS trade_recent ON trades(ts,coin);
+            CREATE INDEX IF NOT EXISTS trade_account ON trades(account,id);
             CREATE TABLE IF NOT EXISTS quotes(id TEXT PRIMARY KEY, account TEXT, coin TEXT, side TEXT, qty INTEGER, amount INTEGER, expires INTEGER, request_id TEXT UNIQUE, result TEXT);
             CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT);
             CREATE TABLE IF NOT EXISTS launches(coin TEXT PRIMARY KEY, created_at INTEGER NOT NULL, seed_cash INTEGER NOT NULL, activity_goal INTEGER NOT NULL);
@@ -93,6 +97,7 @@ class Market:
             )
             db.execute("INSERT OR IGNORE INTO meta VALUES('launch_sequence', '0')")
             self._ensure_personalities(db, now)
+            self._ensure_crowd(db, now)
             db.commit()
 
     def _ensure_personalities(self, db, now):
@@ -135,6 +140,52 @@ class Market:
                 "INSERT OR IGNORE INTO agent_personas(account,name,persona) VALUES(?,?,?)",
                 (identity, name, persona),
             )
+
+    def _ensure_crowd(self, db, now):
+        # Stable entrants, independent finite balances, one grant per identity.
+        # Reopening an existing world never tops up or resets a trader.
+        count = db.execute(
+            "SELECT COUNT(*) FROM accounts WHERE kind='agent'"
+        ).fetchone()[0]
+        rng = random.Random("norx-crowd-v1")
+        personas = list(PERSONALITIES)
+        weights = [10, 10, 5, 20, 15, 1, 39]
+        index = 0
+        while count < TRADER_POPULATION:
+            index += 1
+            identity = f"agent-crowd-{index:05}"
+            persona = rng.choices(personas, weights=weights)[0]
+            tier = rng.random()
+            dollars = (
+                int(math.exp(rng.uniform(math.log(50), math.log(5000))))
+                if tier < 0.85
+                else rng.randint(5000, 25000)
+                if tier < 0.99
+                else rng.randint(50000, 150000)
+            )
+            policy = PERSONALITIES[persona]
+            created = db.execute(
+                "INSERT OR IGNORE INTO accounts VALUES(?,?,?,?,?,?)",
+                (
+                    identity,
+                    dollars * UNIT,
+                    "agent",
+                    policy.strategy,
+                    policy.exposure,
+                    policy.activation,
+                ),
+            )
+            if not created.rowcount:
+                continue
+            db.execute(
+                "INSERT INTO agent_grants VALUES(?,?,?)",
+                (identity, dollars * UNIT, now),
+            )
+            db.execute(
+                "INSERT INTO agent_personas(account,name,persona,next_tick) VALUES(?,?,?,?)",
+                (identity, f"Trader {index + 36:04}", persona, rng.randint(0, 20)),
+            )
+            count += 1
 
     def _launch_due(self, db, rng, now):
         due = int(
@@ -443,20 +494,34 @@ class Market:
                     0.000001, old["reference"] * math.exp(drift + rng.gauss(0, 0.002))
                 )
                 db.execute("UPDATE coins SET reference=? WHERE id=?", (ref, old["id"]))
-                agents = db.execute(
-                    "SELECT a.*,p.persona,p.name,p.next_tick FROM accounts a JOIN agent_personas p ON p.account=a.id WHERE a.kind='agent'"
-                ).fetchall()
-                rng.shuffle(agents)
-                for a in agents:
-                    policy = PERSONALITIES[a["persona"]]
-                    if tick < a["next_tick"] or rng.random() > policy.activation:
-                        continue
-                    if self._agent_decision(db, a, old["id"], rng):
-                        # One global cooldown, not one trade for every sampled coin.
-                        db.execute(
-                            "UPDATE agent_personas SET next_tick=? WHERE account=?",
-                            (tick + rng.randint(*policy.cooldown), a["id"]),
+            # Evaluate a bounded random cohort once, rather than every trader on
+            # every market. All identities can participate; idle traders cost no SQL.
+            eligible = db.execute(
+                "SELECT a.*,p.persona,p.name,p.next_tick FROM accounts a JOIN agent_personas p ON p.account=a.id WHERE a.kind='agent' AND p.next_tick<=?",
+                (tick,),
+            ).fetchall()
+            for a in rng.sample(eligible, min(DECISIONS_PER_TICK, len(eligible))):
+                policy = PERSONALITIES[a["persona"]]
+                if rng.random() > policy.activation or not markets:
+                    continue
+                choices = list(markets)
+                if rng.random() < 0.4:
+                    owned = [
+                        r[0]
+                        for r in db.execute(
+                            "SELECT coin FROM holdings WHERE account=? AND qty>0",
+                            (a["id"],),
                         )
+                        if r[0] in markets
+                    ]
+                    if owned:
+                        choices = owned
+                if self._agent_decision(db, a, rng.choice(choices), rng):
+                    db.execute(
+                        "UPDATE agent_personas SET next_tick=? WHERE account=?",
+                        (tick + rng.randint(*policy.cooldown), a["id"]),
+                    )
+            for old in markets.values():
                 latest = db.execute(
                     "SELECT * FROM coins WHERE id=?", (old["id"],)
                 ).fetchone()
@@ -561,7 +626,30 @@ class Market:
             """,
                 (now - 86400, now - 86400),
             ).fetchall()
+            recent = {}
+            for r in db.execute(
+                """SELECT coin,
+                SUM(CASE WHEN side='buy' THEN amount ELSE 0 END) AS buys,
+                SUM(CASE WHEN side='sell' THEN amount ELSE 0 END) AS sells,
+                SUM(side='buy') AS buy_count,SUM(side='sell') AS sell_count,
+                COUNT(DISTINCT CASE WHEN side='buy' THEN account END) AS buyers
+                FROM trades WHERE ts>=? AND ts<=? GROUP BY coin""",
+                (now - 300, now),
+            ):
+                value = dict(r)
+                value["score"] = (
+                    value["buys"]
+                    / UNIT
+                    * math.log2(2 + value["buyers"])
+                    * value["buy_count"]
+                    / max(1, value["buy_count"] + value["sell_count"])
+                )
+                recent[r["coin"]] = value
+            hot_ids = set(
+                sorted(recent, key=lambda c: recent[c]["score"], reverse=True)[:10]
+            )
             coins = []
+            hot_coins = []
             counts = {"new": 0, "stretch": 0, "migrated": 0}
             for r in rows:
                 p = r["cash"] / r["tokens"] / UNIT
@@ -575,30 +663,42 @@ class Market:
                     else "new"
                 )
                 counts[stage] += 1
-                if counts[stage] > PULSE_LIMIT and r["id"] != selected:
+                if (
+                    counts[stage] > PULSE_LIMIT
+                    and r["id"] != selected
+                    and r["id"] not in hot_ids
+                ):
                     continue
-                coins.append(
-                    {
-                        "id": r["id"],
-                        "name": r["name"],
-                        "symbol": r["symbol"],
-                        "price": p,
-                        "circulating_supply": circulation,
-                        "market_cap": p * circulation,
-                        "fdv": p * SUPPLY,
-                        "volume_24h": r["volume_24h"] / UNIT,
-                        "change_24h": (p / r["first_price"] - 1) * 100
-                        if r["first_price"]
-                        else 0,
-                        "pool_usd": r["cash"] / UNIT,
-                        "created_at": r["created_at"],
-                        "progress": progress,
-                        "stage": stage,
-                        "txns": r["txns"],
-                        "holders": r["holders"],
-                        "in_feed": counts[stage] <= PULSE_LIMIT,
-                    }
-                )
+                value = {
+                    "id": r["id"],
+                    "name": r["name"],
+                    "symbol": r["symbol"],
+                    "price": p,
+                    "circulating_supply": circulation,
+                    "market_cap": p * circulation,
+                    "fdv": p * SUPPLY,
+                    "volume_24h": r["volume_24h"] / UNIT,
+                    "change_24h": (p / r["first_price"] - 1) * 100
+                    if r["first_price"]
+                    else 0,
+                    "pool_usd": r["cash"] / UNIT,
+                    "created_at": r["created_at"],
+                    "progress": progress,
+                    "stage": stage,
+                    "txns": r["txns"],
+                    "holders": r["holders"],
+                    "in_feed": counts[stage] <= PULSE_LIMIT,
+                    "buy_usd_5m": recent.get(r["id"], {}).get("buys", 0) / UNIT,
+                    "sell_usd_5m": recent.get(r["id"], {}).get("sells", 0) / UNIT,
+                    "buyers_5m": recent.get(r["id"], {}).get("buyers", 0),
+                    "buys_5m": recent.get(r["id"], {}).get("buy_count", 0),
+                    "sells_5m": recent.get(r["id"], {}).get("sell_count", 0),
+                    "heat_score": recent.get(r["id"], {}).get("score", 0),
+                }
+                if value["in_feed"] or value["id"] == selected:
+                    coins.append(value)
+                if value["id"] in hot_ids:
+                    hot_coins.append(value)
             names = {
                 row["account"]: dict(row)
                 for row in db.execute("SELECT * FROM agent_personas")
@@ -671,6 +771,12 @@ class Market:
                 if selected
                 else [],
                 "large_trades": large_trades,
+                "trending": sorted(
+                    [c for c in hot_coins if c["heat_score"] > 0],
+                    key=lambda c: c["heat_score"],
+                    reverse=True,
+                )[:10],
+                "trending_window_seconds": 300,
                 "agents": agents,
                 "condition": db.execute(
                     "SELECT value FROM meta WHERE key='condition'"

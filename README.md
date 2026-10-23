@@ -324,3 +324,36 @@ npm run dev -- --force
 Then hard-refresh the browser with Ctrl+Shift+R. Run
 `NORX_TEST_URL=http://127.0.0.1:5173 .venv/bin/python scripts/smoke_startup.py`
 from the repository root to check the Vite startup path and module-load failure UI.
+
+### Trade picker, hot buys, and a larger crowd
+
+Trade opens `#trade`, a searchable market picker, instead of linking to a default
+FROG chart. Selecting any market opens that market's chart and USD ticket.
+Pulse has a Trending strip; Discover and the picker have a Trending · 5m tab and
+sorts for heat or recent buy USD. The API aggregates actual five-minute buy/sell
+USD, buy/sell counts, and distinct buyers across every coin, including older coins
+outside the latest launch feed. Heat is buy USD × log2(2 + distinct buyers) × the
+buy share of trade count. It is current activity, not a prediction. Sell-only or
+expired activity does not qualify. Dollar figures include the actual trade fees.
+
+The world now maintains at least 2,000 persistent trader accounts. Upgrading a
+36-agent world adds 1,964 entrants with varied personas and finite initial funds;
+existing accounts, holdings, pools, and balances stay intact. Most entrants have
+small budgets, with fewer moderate and wealthy entrants. Each new identity gets
+one recorded starting grant; restarts never refill it. These grants expand the
+fictional money supply once, on upgrade, rather than continuously creating money.
+
+The worker randomly samples up to 256 eligible traders per two-second tick, with
+personality-specific activation and cooldowns, and considers each sampled trader
+at most once per tick. Traders can revisit their existing positions and sell.
+The population is real accounts with independent holdings, not a counter or
+2,000 simultaneous orders. The Agents page searches the full population and
+renders 40 traders per page. In a temporary local benchmark, initializing 2,000
+accounts took about 25 ms, and 30 early ticks averaged about 6 ms each; larger
+histories and other machines will vary.
+
+`test_crowd.py` checks upgrade preservation, one-time funding, bounded cohorts,
+participation, rolling heat, distinct buyer counts, and older hot markets.
+`scripts/smoke_heat.py` checks the picker, chosen coin chart, actual trending data,
+pagination, search, the star background, and mobile layouts against a running
+backend. Restart both backend and frontend after updating to activate the crowd.

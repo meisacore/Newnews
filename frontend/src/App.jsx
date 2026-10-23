@@ -127,7 +127,7 @@ function readRoute() {
   if (hash.startsWith("coin/"))
     return { view: "coin", coin: decodeURIComponent(hash.slice(5)) };
   return {
-    view: ["pulse", "discover", "portfolio", "agents"].includes(hash)
+    view: ["pulse", "discover", "trade", "portfolio", "agents"].includes(hash)
       ? hash
       : "pulse",
   };
@@ -137,7 +137,7 @@ export function App({ auth }) {
     [state, setState] = useState(null),
     [feedError, setFeedError] = useState(""),
     [me, setMe] = useState(null),
-    [selected, setSelected] = useState(() => readRoute().coin || "frog"),
+    [selected, setSelected] = useState(() => readRoute().coin || ""),
     [interval, setIntervalValue] = useState(60),
     [side, setSide] = useState("buy"),
     [amount, setAmount] = useState("50"),
@@ -310,7 +310,9 @@ export function App({ auth }) {
                   ? "Portfolio"
                   : route.view === "agents"
                     ? "Meet the traders."
-                    : "Discover"}
+                    : route.view === "trade"
+                      ? "Trade"
+                      : "Discover"}
             </h1>
             <p className="muted">
               Your edge starts here. Trade the simulated market in virtual USD.
@@ -356,7 +358,12 @@ export function App({ auth }) {
           ← Back to Pulse
         </a>
       )}
-      {route.view === "discover" && (
+      {route.view === "trade" && (
+        <p className="market-picker-note">
+          Choose a coin below to open its chart and USD trade ticket.
+        </p>
+      )}
+      {(route.view === "discover" || route.view === "trade") && (
         <Discover
           state={state}
           onOpen={openCoin}
