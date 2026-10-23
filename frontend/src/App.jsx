@@ -7,6 +7,8 @@ import {
 import "./style.css";
 import Pulse from "./Pulse";
 import Agents from "./Agents";
+import { TerminalBar, Discover, Activity } from "./Terminal";
+import "./terminal.css";
 import { validateMarketState } from "./marketState";
 
 const dollars = (n) =>
@@ -284,7 +286,7 @@ export function App({ auth }) {
     }
   }
   return (
-    <div className="app">
+    <div className={"app terminal-app view-" + route.view}>
       <header>
         <a className="logo" href="/">
           NOR<span>X</span>
@@ -321,6 +323,7 @@ export function App({ auth }) {
           )}
         </div>
       </header>
+      <TerminalBar state={state} me={me} />
       <div className="disclaimer">
         SIMULATED WORLD · No real money, wallets, or withdrawals{" "}
         {auth.dev && " · LOCAL TEST ACCOUNT"}
@@ -384,34 +387,15 @@ export function App({ auth }) {
         </a>
       )}
       {route.view === "discover" && (
-        <section className="market-list">
-          {state?.coins.map((c) => (
-            <button
-              className={"coin " + (c.id === selected ? "selected" : "")}
-              key={c.id}
-              disabled={busy}
-              onClick={() => {
-                openCoin(c.id);
-                setQuote(null);
-              }}
-            >
-              <div>
-                <strong>{c.symbol}</strong>
-                <small>{c.name}</small>
-              </div>
-              <div>
-                <strong>{dollars(c.price)}</strong>
-                <small className={c.change_24h >= 0 ? "up" : "down"}>
-                  {c.change_24h >= 0 ? "+" : ""}
-                  {c.change_24h.toFixed(2)}% · 24h
-                </small>
-              </div>
-            </button>
-          )) || <p>Connecting to the market…</p>}
-        </section>
+        <Discover
+          state={state}
+          onOpen={openCoin}
+          onBuy={prepareBuy}
+          busy={busy}
+        />
       )}
       {route.view === "coin" && coin && (
-        <main>
+        <main className="trading-workspace">
           <section className="panel">
             <div className="chart-heading">
               <div>
@@ -436,6 +420,23 @@ export function App({ auth }) {
                 ))}
               </div>
             </div>
+            <div className="coin-metrics">
+              <span>
+                24h change{" "}
+                <b className={coin.change_24h >= 0 ? "up" : "down"}>
+                  {coin.change_24h.toFixed(2)}%
+                </b>
+              </span>
+              <span>
+                Pool USD <b>{dollars(coin.pool_usd)}</b>
+              </span>
+              <span>
+                Holders <b>{coin.holders}</b>
+              </span>
+              <span>
+                Stage <b>{coin.stage}</b>
+              </span>
+            </div>
             <Chart coin={selected} interval={interval} refresh={refresh} />
             <div className="stats">
               <div>
@@ -456,7 +457,7 @@ export function App({ auth }) {
               not cash invested.
             </p>
           </section>
-          <aside className="panel">
+          <aside className="panel order-ticket">
             <h2>Make your move</h2>
             <div className="tabs">
               {["buy", "sell"].map((s) => (
@@ -489,6 +490,30 @@ export function App({ auth }) {
               Held: {(me?.holdings[selected] || 0).toLocaleString()}{" "}
               {coin.symbol}
             </p>
+            <div className="ticket-presets">
+              {(side === "buy" ? [25, 50, 250, 1000] : [25, 50, 75, 100]).map(
+                (n) => (
+                  <button
+                    key={n}
+                    disabled={busy}
+                    onClick={() => {
+                      setAmount(
+                        String(
+                          side === "buy"
+                            ? n
+                            : Math.floor(
+                                ((me?.holdings[selected] || 0) * n) / 100,
+                              ),
+                        ),
+                      );
+                      setQuote(null);
+                    }}
+                  >
+                    {side === "buy" ? "$" + n : n + "%"}
+                  </button>
+                ),
+              )}
+            </div>
             {quote && (
               <div className="quote">
                 <strong>
@@ -530,6 +555,9 @@ export function App({ auth }) {
             </p>
           </aside>
         </main>
+      )}
+      {route.view === "coin" && coin && (
+        <Activity state={state} selected={selected} me={me} />
       )}
       {(route.view === "coin" || route.view === "portfolio") && (
         <section className="bottom">

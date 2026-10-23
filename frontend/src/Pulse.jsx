@@ -71,11 +71,7 @@ export default function Pulse({ state, feedError, busy, onOpen, onBuy }) {
   const remaining = state
     ? Math.max(0, Math.ceil(state.next_launch_at - serverNow))
     : 0;
-  const coins = (state?.coins || [])
-    .filter((c) => c.in_feed !== false)
-    .filter((c) =>
-      (c.name + " " + c.symbol).toLowerCase().includes(query.toLowerCase()),
-    );
+  const coins = (state?.coins || []).filter((c) => c.in_feed !== false);
   return (
     <section className="pulse" aria-label="Pulse market feed">
       <div className="pulse-toolbar">

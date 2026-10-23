@@ -251,3 +251,30 @@ node --test frontend/src/marketState.test.js frontend/src/pulseLogic.test.js
 polling, held arrivals, independent filters, preset persistence, delayed versus
 paused states, themed scrollbars and mobile layout. It does not submit trades or
 modify the economy. Its screenshots reload the actual market stream separately.
+
+### Compact trading workspace
+
+The trading app uses a full-width terminal layout inspired by the supplied Trial
+capture, with NORX branding, the original star field, and the welcome animation.
+A shared status strip shows market count, agent population, economy, and available
+virtual USD. Discover is a searchable table with volume, gainers, market-cap and
+newest sorting, plus launch-stage filters. Its $50 buttons prepare the trade ticket.
+
+Coin pages keep the real candlestick chart and add pool/holder/stage statistics,
+$25/$50/$250/$1,000 buy presets, and sell presets based on the player's holdings.
+Every order still requires preview and confirmation. The execution table filters
+by market versus personal trades and by buy/sell side. The state endpoint includes
+up to 50 recent `coin_trades` for the selected market, separately from the world
+feed, using the same public identity redaction. This prevents an active world
+from hiding a quieter coin's executions. This is market-order simulation; the
+interface does not offer unsupported limit orders or invented performance data.
+
+After building, run against an API with `NORX_DEV_AUTH=1`:
+
+```sh
+NORX_TEST_URL=http://127.0.0.1:8000 BROWSER_EXECUTABLE=/usr/bin/chromium .venv/bin/python scripts/smoke_terminal.py
+```
+
+It submits a virtual buy to
+the test account, checks search/sorting/execution filters, and checks five mobile
+routes. Use a separate temporary `NORX_DB` for this test.

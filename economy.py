@@ -661,6 +661,15 @@ class Market:
                 "simulation": simulation_status(last_tick, observed_at),
                 "coins": coins,
                 "trades": trades,
+                "coin_trades": [
+                    public_trade(r)
+                    for r in db.execute(
+                        "SELECT * FROM trades WHERE coin=? ORDER BY id DESC LIMIT 50",
+                        (selected,),
+                    )
+                ]
+                if selected
+                else [],
                 "large_trades": large_trades,
                 "agents": agents,
                 "condition": db.execute(
