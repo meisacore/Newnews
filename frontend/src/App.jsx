@@ -5,6 +5,8 @@ import {
   HistogramSeries,
 } from "lightweight-charts";
 import "./style.css";
+import { EconomyPicker, readWorld } from "./Economies";
+import { useTradeTray } from "./TradeTray";
 import Pulse from "./Pulse";
 import Agents from "./Agents";
 import ActivityDrawer from "./ActivityDrawer";
@@ -20,6 +22,7 @@ async function api(path, token, body, signal) {
     cache: "no-store",
     signal,
     headers: {
+      "X-Norx-World": readWorld(),
       ...(token ? { Authorization: "Bearer " + token } : {}),
       ...(body ? { "Content-Type": "application/json" } : {}),
     },
@@ -112,19 +115,15 @@ function Chart({ coin, interval, refresh, range }) {
         );
         if (!fitted.current && data.length) {
           if (range === 86400)
-            chart.current
-              .timeScale()
-              .setVisibleLogicalRange({
-                from: data.length - 1 - Math.floor(range / interval),
-                to: data.length + 3,
-              });
+            chart.current.timeScale().setVisibleLogicalRange({
+              from: data.length - 1 - Math.floor(range / interval),
+              to: data.length + 3,
+            });
           else if (data.length < 40)
-            chart.current
-              .timeScale()
-              .setVisibleLogicalRange({
-                from: data.length - 60,
-                to: data.length + 4,
-              });
+            chart.current.timeScale().setVisibleLogicalRange({
+              from: data.length - 60,
+              to: data.length + 4,
+            });
           else chart.current.timeScale().fitContent();
           fitted.current = true;
         }
@@ -160,6 +159,18 @@ function readRoute() {
   };
 }
 export function App({ auth }) {
+  const [world, setWorld] = useState(readWorld);
+  function changeWorld(id) {
+    localStorage.setItem("norx.world", id);
+    window.location.hash = "pulse";
+    setWorld(id);
+  }
+  return (
+    <WorldApp key={world} world={world} onWorld={changeWorld} auth={auth} />
+  );
+}
+function WorldApp({ auth, world, onWorld }) {
+  const tray = useTradeTray();
   const money = useCurrency();
   const dollars = money.format;
   const [whales, setWhales] = useState(false);
@@ -352,6 +363,7 @@ export function App({ auth }) {
         onOpen={openCoin}
         onWhales={() => setWhales(true)}
       />
+      <EconomyPicker world={world} onChange={onWorld} busy={busy} />
       <ActivityDrawer
         open={whales}
         onClose={() => setWhales(false)}
@@ -436,7 +448,7 @@ export function App({ auth }) {
       )}
       {route.view === "coin" && coin && (
         <main className="trading-workspace token-workspace">
-          <section className="panel token-left">
+          <section className="panel token-left" style={tray.style}>
             <TokenHeader coin={coin} period={period} onPeriod={setPeriod} />
             <div className="token-chart-tools">
               <div
@@ -491,6 +503,7 @@ export function App({ auth }) {
                 range={range}
               />
             </div>
+            {tray.control}
             <Activity state={state} selected={selected} me={me} />
           </section>
           <aside className="panel order-ticket">

@@ -1,7 +1,7 @@
 # NORX
 
 A fictional USD trading world with Privy authentication, persistent portfolios,
-36 rule-based agents with different wealth and judgment, shared AMM liquidity, trade-derived candles, the original animated starry welcome page, and a live three-column Pulse feed.
+2,000 rule-based agents per world with different wealth and judgment, shared AMM liquidity, trade-derived candles, the original animated starry welcome page, and a live three-column Pulse feed.
 No blockchain, wallets, deposits, withdrawals, LLMs, or external price feed.
 
 ## Development
@@ -435,3 +435,33 @@ rollback. The API tests verify actual day-long candle coverage.
 USD/ETH input round trips, a real virtual buy, positions and mobile layout.
 
 [View the token terminal](docs/token-preview.png).
+
+## Economy scenarios and trade tray
+
+Use **Economy** in the bottom status bar to choose Balanced, Bull run, Bear market,
+or Meme mania. The choice is saved in this browser. Each world has separate coins,
+agent balances, player portfolios, trade history and quotes; switching worlds does
+not reset a previous world or change other players' scenario. Players choosing the
+same world share that market. Each account gets its one-time fictional $10,000
+starting grant separately in each world. Scenarios change risk appetite, activity
+and reference-value drift, rather than prescribing prices or guaranteeing returns.
+
+The existing `NORX_DB` remains the Balanced world. Other worlds are created lazily
+alongside it with `-bull`, `-bear`, or `-mania` before the database extension. The API
+auto-starts one locked worker for each opened world, and shuts them down on exit.
+Keep **all** these database files when updating. With `NORX_AUTO_WORKER=0`, run a
+separate worker against each desired world database using `NORX_DB`.
+
+Agents review their own holdings directly, including coins outside the launch
+feed. They can take profits, cut losses and rotate older positions. Buy orders are
+limited to 6% of the quote-side pool reserve (15% for reckless whales), in addition
+to each trader's finite cash and execution-cost limits. Large orders remain possible
+in deeper pools. These rules do not rewrite past prices, balances or trades.
+Market cap is spot price times circulating supply, not dollars invested. Discover
+now shows the quote-side pool reserve under market cap; trades, volume and trader
+counts use the chosen time window and are never inflated to match market cap.
+
+On a token page, choose **Expand trades** to give the execution tape more space,
+or drag the gold divider between the chart and tape. The divider supports keyboard
+Up/Down and Home/End keys. **Restore chart** returns the chart; drag sizing is saved
+in this browser. Stars, original fonts and the gold theme remain in place.

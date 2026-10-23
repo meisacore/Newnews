@@ -1,6 +1,8 @@
 import os
 import asyncio
 import logging
+import threading
+from scenarios import SCENARIOS
 from contextlib import asynccontextmanager
 from pathlib import Path
 import jwt
@@ -12,12 +14,40 @@ from paths import database_path
 from worker import SimulationRunner
 
 market = Market(database_path())
+worlds = {}
+runners = {}
+world_lock = threading.Lock()
+auto_running = False
+
+
+def current_market(x_norx_world: str = Header(default="balanced")):
+    if x_norx_world not in SCENARIOS:
+        raise HTTPException(400, "Unknown economy")
+    if x_norx_world == "balanced":
+        return market
+    with world_lock:
+        if x_norx_world not in worlds:
+            path = Path(market.path)
+            worlds[x_norx_world] = Market(
+                path.with_name(path.stem + "-" + x_norx_world + path.suffix),
+                scenario=x_norx_world,
+            )
+        chosen = worlds[x_norx_world]
+        if auto_running and x_norx_world not in runners:
+            runner = SimulationRunner(chosen.path)
+            runners[x_norx_world] = runner
+            runner.start()
+        return chosen
+
+
 DEV = os.getenv("NORX_DEV_AUTH") == "1"
 
 
 @asynccontextmanager
 async def lifespan(app):
+    global auto_running
     runner = None
+    auto_running = os.getenv("NORX_AUTO_WORKER", "1") != "0"
     if os.getenv("NORX_AUTO_WORKER", "1") != "0":
         runner = SimulationRunner(market.path)
         runner.start()
@@ -27,8 +57,12 @@ async def lifespan(app):
     try:
         yield
     finally:
+        auto_running = False
         if runner is not None:
             await asyncio.to_thread(runner.stop)
+        for other in list(runners.values()):
+            await asyncio.to_thread(other.stop)
+        runners.clear()
 
 
 app = FastAPI(title="NORX simulated USD market", lifespan=lifespan)
@@ -79,6 +113,7 @@ def identity(authorization: str = Header(default="")):
 def config():
     return {
         "dev_auth": DEV,
+        "economies": SCENARIOS,
         "privy_configured": bool(
             os.getenv("PRIVY_APP_ID") and os.getenv("PRIVY_VERIFICATION_KEY")
         ),
@@ -86,17 +121,22 @@ def config():
 
 
 @app.get("/api/state")
-def state(selected: str | None = None):
+def state(selected: str | None = None, market=Depends(current_market)):
     return market.state(selected)
 
 
 @app.get("/api/me")
-def me(user=Depends(identity)):
+def me(user=Depends(identity), market=Depends(current_market)):
     return market.account(user)
 
 
 @app.get("/api/candles/{coin}")
-def candles(coin: str, interval: int = 60, range_seconds: int = 7200):
+def candles(
+    coin: str,
+    interval: int = 60,
+    range_seconds: int = 7200,
+    market=Depends(current_market),
+):
     if interval not in (60, 300, 900, 3600):
         raise HTTPException(400, "Unsupported candle interval")
     if range_seconds not in (7200, 86400):
@@ -117,13 +157,13 @@ class Execute(BaseModel):
 
 
 @app.post("/api/quote")
-def quote(body: Quote, user=Depends(identity)):
+def quote(body: Quote, user=Depends(identity), market=Depends(current_market)):
     market.account(user)
     return market.quote(user, body.coin, body.side, body.budget, body.qty)
 
 
 @app.post("/api/trade")
-def trade(body: Execute, user=Depends(identity)):
+def trade(body: Execute, user=Depends(identity), market=Depends(current_market)):
     return market.execute(user, body.quote_id, body.request_id)
 
 

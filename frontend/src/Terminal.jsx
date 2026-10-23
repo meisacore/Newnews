@@ -204,6 +204,9 @@ export function Discover({
                   </td>
                   <td className="screener-cap">
                     {money.compact(c.market_cap)}
+                    <small title="Quote-side pool reserve. Market cap is price × circulating supply, not money invested.">
+                      {money.compact(c.pool_usd)} pool
+                    </small>
                   </td>
                   <td>{money.format(c.price)}</td>
                   <td className="screener-age">

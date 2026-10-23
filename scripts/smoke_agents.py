@@ -34,7 +34,7 @@ with sync_playwright() as p:
     page.get_by_role("button", name="Whale watch", exact=True).click()
     page.get_by_role("region", name="Large trades", exact=True).wait_for(timeout=60000)
     state = page.request.get(base + "/api/state").json()
-    assert state["api_version"] == 5
+    assert state["api_version"] == 6
     assert any(t["amount"] >= 1000 * 1e6 for t in state["large_trades"])
     largest = max(state["agents"], key=lambda a: a["biggest_buy"])
     first = page.locator(".whale-watch-trades button").first

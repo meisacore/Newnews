@@ -8,6 +8,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
+from scenarios import SCENARIOS
 from health import simulation_status
 from personalities import PERSONALITIES, WEALTHY_ENTRANTS, intention
 
@@ -23,7 +24,7 @@ DECISIONS_PER_TICK = 256
 
 
 class Market:
-    def __init__(self, path):
+    def __init__(self, path, scenario=None):
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.path = str(path)
         with self.connection() as db:
@@ -86,6 +87,12 @@ class Market:
                     )
                 db.execute("INSERT INTO meta VALUES(?,?)", ("condition", "calm"))
                 db.execute("INSERT INTO meta VALUES(?,?)", ("tick", "0"))
+            if scenario is not None:
+                if scenario not in SCENARIOS:
+                    raise ValueError("Unknown economy")
+                db.execute(
+                    "INSERT OR IGNORE INTO meta VALUES('scenario',?)", (scenario,)
+                )
             self._migrate_supply(db)
             # Additive migration: existing accounts, holdings, pools, and history survive.
             now = int(time.time())
@@ -521,7 +528,13 @@ class Market:
                 db.execute(
                     "UPDATE meta SET value=? WHERE key='condition'", (condition,)
                 )
-            drift = {"calm": 0, "optimistic": 0.0003, "stressed": -0.0003}[condition]
+            scenario_row = db.execute(
+                "SELECT value FROM meta WHERE key='scenario'"
+            ).fetchone()
+            scenario = SCENARIOS[scenario_row[0] if scenario_row else "balanced"]
+            drift = {"calm": 0, "optimistic": 0.0001, "stressed": -0.0001}[
+                condition
+            ] + scenario["drift"]
             # Bound agent work as launches grow; old positions remain eligible for exits.
             newest = db.execute(
                 "SELECT c.* FROM coins c JOIN launches l ON l.coin=c.id ORDER BY l.created_at DESC,c.id DESC LIMIT 40"
@@ -534,7 +547,12 @@ class Market:
             markets = {row["id"]: row for row in sampled}
             for old in markets.values():
                 ref = max(
-                    0.000001, old["reference"] * math.exp(drift + rng.gauss(0, 0.002))
+                    0.000001,
+                    old["reference"]
+                    * math.exp(
+                        drift
+                        + rng.gauss(0, 0.005 if scenario["activity"] > 1.5 else 0.002)
+                    ),
                 )
                 db.execute("UPDATE coins SET reference=? WHERE id=?", (ref, old["id"]))
             # Evaluate a bounded random cohort once, rather than every trader on
@@ -545,21 +563,28 @@ class Market:
             ).fetchall()
             for a in rng.sample(eligible, min(DECISIONS_PER_TICK, len(eligible))):
                 policy = PERSONALITIES[a["persona"]]
-                if rng.random() > policy.activation or not markets:
+                if (
+                    rng.random() > min(1, policy.activation * scenario["activity"])
+                    or not markets
+                ):
                     continue
                 choices = list(markets)
-                if rng.random() < 0.4:
+                if rng.random() < 0.7:
                     owned = [
                         r[0]
                         for r in db.execute(
                             "SELECT coin FROM holdings WHERE account=? AND qty>0",
                             (a["id"],),
                         )
-                        if r[0] in markets
                     ]
                     if owned:
                         choices = owned
-                if self._agent_decision(db, a, rng.choice(choices), rng):
+                chosen = rng.choice(choices)
+                if chosen not in markets:
+                    markets[chosen] = db.execute(
+                        "SELECT * FROM coins WHERE id=?", (chosen,)
+                    ).fetchone()
+                if self._agent_decision(db, a, chosen, rng):
                     db.execute(
                         "UPDATE agent_personas SET next_tick=? WHERE account=?",
                         (tick + rng.randint(*policy.cooldown), a["id"]),
@@ -605,14 +630,42 @@ class Market:
         fraction, estimate, explanation = intention(
             agent["persona"], price, c["reference"], c["momentum"], bool(held), rng
         )
+        scenario_row = db.execute(
+            "SELECT value FROM meta WHERE key='scenario'"
+        ).fetchone()
+        scenario = SCENARIOS[scenario_row[0] if scenario_row else "balanced"]
+        # Positions are reviewed directly, even after they leave the new-coin feed.
+        # Use actual executions for entry price; no synthetic P&L or minted tokens.
+        if held:
+            entry = db.execute(
+                "SELECT SUM(amount)*1.0/SUM(qty)/? AS cost, MAX(ts) AS entered FROM trades WHERE account=? AND coin=? AND side='buy'",
+                (UNIT, agent["id"], coin),
+            ).fetchone()
+            if entry["cost"]:
+                gain = price / entry["cost"] - 1
+                age = max(0, time.time() - entry["entered"])
+                impatient = not policy.disciplined
+                if (
+                    gain > (0.20 if impatient else 0.35)
+                    or gain < (-0.15 if impatient else -0.25)
+                    or (age > (180 if impatient else 900) and rng.random() < 0.35)
+                ):
+                    fraction, estimate = 0, None
+                    explanation = "take profit, cut losses or rotate an aging position"
         if fraction is None:
             return False
+        fraction *= scenario["appetite"]
         gap = fraction * equity - exposure
         band = max(UNIT, equity * 0.001)
         reason = f"{agent['name']} · {policy.label}: {explanation}"
         if gap > band:
             budget = int(
-                min(gap, cash * rng.uniform(policy.order_min, policy.order_max))
+                min(
+                    gap,
+                    cash * rng.uniform(policy.order_min, policy.order_max),
+                    c["cash"]
+                    * (0.15 if agent["persona"] == "reckless_whale" else 0.06),
+                )
             )
             qty = self._agent_buy_quantity(c, budget, policy, estimate)
             if not qty:
@@ -851,7 +904,7 @@ class Market:
             last_tick = int(heartbeat[0]) if heartbeat else None
             observed_at = int(time.time())
             return {
-                "api_version": 5,
+                "api_version": 6,
                 "simulation": simulation_status(last_tick, observed_at),
                 "coins": coins,
                 "trades": trades,

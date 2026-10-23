@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { validateMarketState } from "./marketState.js";
 
 const valid = () => ({
-  api_version: 5,
+  api_version: 6,
   coins: [{ id: "frog", stage: "new", total_supply: 1000000000 }],
   screener: [],
   market_totals: Object.fromEntries(

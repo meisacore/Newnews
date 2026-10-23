@@ -2844,3 +2844,135 @@ a:hover {
     min-height: 0;
   }
 }
+
+/* A reachable world selector and a keyboard / pointer resizable trade tape. */
+.economy-launch {
+  position: fixed;
+  bottom: 5px;
+  left: 48%;
+  z-index: 45;
+  padding: 4px 12px;
+  color: #cfb98c;
+  background: #14212a;
+  border: 1px solid #39434a;
+  border-radius: 5px;
+  font-size: 12px;
+}
+.economy-launch span {
+  margin-left: 12px;
+}
+.economy-dialog {
+  color: #e5e9ed;
+  background: #101921;
+  border: 1px solid #645b47;
+  border-radius: 14px;
+  max-width: 620px;
+  width: calc(100% - 32px);
+  padding: 26px;
+}
+.economy-dialog::backdrop {
+  background: #020a10c9;
+  backdrop-filter: blur(6px);
+}
+.economy-dialog header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.economy-dialog small {
+  color: #cfb98c;
+  letter-spacing: 0.15em;
+}
+.economy-dialog h2 {
+  margin: 8px 0;
+}
+.economy-dialog p {
+  color: #90a0ab;
+  line-height: 1.6;
+  font-size: 14px;
+}
+.economy-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 20px 0;
+}
+.economy-options button {
+  text-align: left;
+  padding: 18px;
+  background: #17242e;
+  border: 1px solid #33434e;
+  border-radius: 9px;
+}
+.economy-options button[aria-pressed="true"] {
+  border-color: #c7b38b;
+  background: #c7b38b15;
+}
+.economy-options strong {
+  display: block;
+  color: #cfb98c;
+  margin-bottom: 8px;
+}
+.economy-options span {
+  color: #9bacb8;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.terminal-app .token-left .chart-frame {
+  height: var(--chart-size, 42dvh);
+  min-height: 90px;
+}
+.tray-controls {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 27px;
+  border-top: 1px solid #30414c;
+  border-bottom: 1px solid #263640;
+  background: #14212a;
+}
+.tray-controls [role="separator"] {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  height: 100%;
+  cursor: ns-resize;
+  touch-action: none;
+}
+.tray-controls [role="separator"] span {
+  width: 55px;
+  height: 4px;
+  border-radius: 4px;
+  background: #786d55;
+}
+.tray-controls button {
+  border: 0;
+  border-left: 1px solid #33434e;
+  border-radius: 0;
+  background: transparent;
+  color: #cfb98c;
+  height: 100%;
+  font-size: 11px;
+  padding: 0 14px;
+}
+@media (max-width: 760px) {
+  .economy-launch {
+    bottom: 73px;
+    left: auto;
+    right: 12px;
+  }
+  .economy-options {
+    grid-template-columns: 1fr;
+  }
+  .terminal-app .token-left .execution-feed {
+    height: 350px;
+    max-height: 65dvh;
+  }
+}
+.screener-cap small {
+  display: block;
+  color: #8a9da9;
+  font-size: 10px;
+  margin-top: 4px;
+  font-weight: 400;
+}

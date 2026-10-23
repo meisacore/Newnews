@@ -1,6 +1,6 @@
 export function validateMarketState(data) {
   if (
-    data?.api_version !== 5 ||
+    data?.api_version !== 6 ||
     !Array.isArray(data.coins) ||
     !Array.isArray(data.screener) ||
     !data.coins.every((c) => c.total_supply === 1000000000) ||

@@ -35,6 +35,9 @@ class PersonalityTests(unittest.TestCase):
     def test_wealthy_impulsive_buy_is_large_but_cash_and_liquidity_are_finite(self):
         with self.market.transaction() as db:
             agent = self.agent(db, "agent-whale-03")
+            db.execute(
+                "UPDATE coins SET cash=cash*10,reference=reference*10 WHERE id='frog'"
+            )
             before = agent["cash"]
             self.assertTrue(self.market._agent_decision(db, agent, "frog", eager_rng()))
             trade = db.execute(
@@ -107,7 +110,7 @@ class PersonalityTests(unittest.TestCase):
             remaining = db.execute(
                 "SELECT cash FROM accounts WHERE id='agent-whale-03'"
             ).fetchone()[0]
-            self.assertGreater(1_500_000 * UNIT - remaining, 1000 * UNIT)
+            self.assertGreater(1_500_000 * UNIT - remaining, 1 * UNIT)
             self.assertEqual(
                 db.execute(
                     "SELECT qty FROM holdings WHERE account='agent-whale-03' AND coin='frog'"

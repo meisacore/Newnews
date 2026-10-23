@@ -16,7 +16,7 @@ with sync_playwright() as p:
     page.get_by_role("heading", name="Trade token", exact=True).wait_for()
     page.locator(".token-heading-identity h2").filter(has_text="Moon Frog").wait_for()
     state = page.request.get(base + "/api/state?selected=frog").json()
-    assert state["api_version"] == 5 and all(
+    assert state["api_version"] == 6 and all(
         c["total_supply"] == 1000000000 for c in state["coins"]
     )
     assert "1,000,000,000" in page.locator(".token-info").inner_text()
