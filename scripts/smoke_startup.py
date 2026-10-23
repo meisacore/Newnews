@@ -14,11 +14,11 @@ with sync_playwright() as p:
     page.route("**/src/main.jsx*", lambda route: route.abort())
     page.goto(base + "/market.html#pulse", wait_until="domcontentloaded")
     page.get_by_text("The exchange could not start.", exact=True).wait_for()
-    assert page.locator(".startup-brand").inner_text() == "norx."
+    assert page.locator(".startup-brand").inner_text() == "NORX"
     assert page.get_by_role("link", name="Reload exchange").is_visible()
     assert (
         page.evaluate("getComputedStyle(document.body).backgroundColor")
-        == "rgb(11, 13, 15)"
+        == "rgb(9, 17, 24)"
     )
     page.unroute("**/src/main.jsx*")
     # No external fonts may block the welcome or exchange in local mode.

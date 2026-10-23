@@ -1,14 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { simulationDisplay } from "./marketState";
 import PulseColumn from "./PulseColumn";
-import HotMarkets from "./HotMarkets";
 
-const compact = (n) =>
-  new Intl.NumberFormat("en-US", {
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(n || 0);
-const money = (n) => "$" + compact(n);
 const stages = [
   {
     id: "new",
@@ -34,34 +27,7 @@ export default function Pulse({ state, feedError, busy, onOpen, onBuy }) {
     [quick, setQuick] = useState("50"),
     [tab, setTab] = useState("new"),
     [now, setNow] = useState(Date.now());
-  const watchRef = useRef(null);
-  const [watchEdges, setWatchEdges] = useState({ left: false, right: false });
   const health = simulationDisplay(state?.simulation);
-  useEffect(() => {
-    const el = watchRef.current;
-    if (!el) return;
-    const update = () =>
-      setWatchEdges({
-        left: el.scrollLeft > 1,
-        right: el.scrollLeft + el.clientWidth < el.scrollWidth - 1,
-      });
-    update();
-    el.addEventListener("scroll", update, { passive: true });
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
-    return () => {
-      el.removeEventListener("scroll", update);
-      observer.disconnect();
-    };
-  }, [state?.large_trades]);
-  function scrollWatch(direction) {
-    watchRef.current?.scrollBy({
-      left: direction * 280,
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "auto"
-        : "smooth",
-    });
-  }
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
@@ -131,53 +97,6 @@ export default function Pulse({ state, feedError, busy, onOpen, onBuy }) {
                     : "Launching next batch…"}
         </span>
       </div>
-      {state?.large_trades?.length > 0 && (
-        <section className="whale-watch" aria-label="Large trades">
-          <div className="whale-watch-title">
-            <strong>Whale watch</strong>
-            <small>Recent trades $1k+</small>
-          </div>
-          <div
-            className="whale-watch-trades"
-            ref={watchRef}
-            tabIndex={0}
-            aria-label="Recent large trades"
-          >
-            {state.large_trades.map((t) => (
-              <button
-                key={t.id}
-                disabled={busy}
-                onClick={() => onOpen(t.coin)}
-                title={t.reason}
-              >
-                <span className={t.side === "buy" ? "up" : "down"}>
-                  {t.side.toUpperCase()} {money(t.amount / 1e6)}
-                </span>
-                <small>
-                  {t.agent_name || "Player"} · {t.persona || "Player trade"}
-                </small>
-              </button>
-            ))}
-          </div>
-          <div className="watch-arrows">
-            <button
-              aria-label="Scroll large trades left"
-              disabled={!watchEdges.left}
-              onClick={() => scrollWatch(-1)}
-            >
-              ‹
-            </button>
-            <button
-              aria-label="Scroll large trades right"
-              disabled={!watchEdges.right}
-              onClick={() => scrollWatch(1)}
-            >
-              ›
-            </button>
-          </div>
-        </section>
-      )}
-      <HotMarkets state={state} onOpen={onOpen} />
       <div className="pulse-mobile-tabs">
         {stages.map((s) => (
           <button

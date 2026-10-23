@@ -29,7 +29,7 @@ with sync_playwright() as p:
     assert page.locator(".agent-card").count() == 1
     page.get_by_label("Search traders").fill("")
     page.screenshot(path="/tmp/norx-agent-personalities.png", full_page=True)
-    page.get_by_role("link", name="Pulse", exact=True).click()
+    page.get_by_role("link", name="Discover", exact=True).click()
     page.get_by_role("region", name="Large trades", exact=True).wait_for(timeout=60000)
     state = page.request.get(base + "/api/state").json()
     assert state["api_version"] == 3

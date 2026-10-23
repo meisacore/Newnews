@@ -14,10 +14,20 @@ with sync_playwright() as p:
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.goto(base + "/market.html#pulse")
     page.get_by_role("heading", name="Pulse", exact=True).wait_for()
+    assert page.locator(".hot-markets,.whale-watch").count() == 0
+    assert page.locator(".wordmark").inner_text() == "NORX"
+    assert (
+        page.locator(".wordmark > span").evaluate("el=>getComputedStyle(el).color")
+        == "rgb(201, 180, 140)"
+    )
+    page.get_by_role("link", name="Discover", exact=True).click()
     page.locator(".hot-market-scroll button").first.wait_for(timeout=15000)
+    page.get_by_role("region", name="Large trades", exact=True).wait_for()
     state = page.request.get(base + "/api/state").json()
     assert len(state["agents"]) == 2000
-    assert "sky-bg.jpg" in page.evaluate("getComputedStyle(document.body).backgroundImage")
+    assert "sky-bg.jpg" in page.evaluate(
+        "getComputedStyle(document.body).backgroundImage"
+    )
     assert state["trending"] and all(c["buy_usd_5m"] > 0 for c in state["trending"])
     assert state["trending"] == sorted(
         state["trending"], key=lambda c: c["heat_score"], reverse=True
@@ -25,9 +35,10 @@ with sync_playwright() as p:
     page.get_by_role("link", name="Trade", exact=True).click()
     page.get_by_role("heading", name="Trade", exact=True).wait_for()
     assert page.url.endswith("#trade") and page.locator("#amount").count() == 0
-    page.get_by_label("Search markets").fill("RCKT")
-    page.get_by_role("button", name="Rocket Fuel RCKT").click()
-    assert page.url.endswith("#coin/rocket")
+    chosen = next(c for c in state["coins"] if c["id"] != "frog" and c["in_feed"])
+    page.get_by_label("Search markets").fill(chosen["symbol"])
+    page.locator(".market-name").filter(has_text=chosen["symbol"]).first.click()
+    assert page.url.endswith("#coin/" + chosen["id"])
     page.get_by_role("heading", name="Make your move", exact=True).wait_for()
     page.get_by_role("link", name="Discover", exact=True).click()
     page.get_by_role("button", name="Trending · 5m", exact=True).click()
@@ -49,10 +60,12 @@ with sync_playwright() as p:
         page.screenshot(path="/tmp/norx-heat-" + route + "-mobile.png", full_page=True)
         page.set_viewport_size({"width": 1440, "height": 1000})
     page.goto(base + "/market.html#pulse")
-    page.locator(".hot-market-scroll button").first.wait_for()
+    assert page.locator(".hot-markets,.whale-watch").count() == 0
+    page.evaluate("document.fonts.ready")
+    assert "DM Sans" in page.evaluate("getComputedStyle(document.body).fontFamily")
     page.screenshot(path="/tmp/norx-heat-pulse.png")
     assert not errors, errors
     print(
-        "PASS: Trade picker, chosen RCKT chart, actual hot buys, trending sort, 2,000 accounts, agent pagination/search, four mobile routes"
+        "PASS: Trade picker, chosen market chart, actual hot buys, trending sort, 2,000 accounts, agent pagination/search, four mobile routes"
     )
     browser.close()

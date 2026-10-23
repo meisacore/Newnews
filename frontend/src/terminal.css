@@ -1,18 +1,19 @@
 /* Exchange workspace. Star field is shared with the original NORX welcome. */
 :root {
-  font-family: Arial, Helvetica, sans-serif;
-  --surface: #111315;
+  font-family: "DM Sans", sans-serif;
+  --surface: #101921;
   --raised: #1a1c1f;
-  --line: #292c30;
+  --line: #293843;
   --ink: #eeeeef;
-  --muted: #8c9097;
-  --green: #77d99b;
+  --muted: #8fa0ad;
+  --gold: #c9b48c;
+  --green: #6ad2ac;
   --red: #ed7d8f;
-  --scroll-track: #111315;
-  --scroll-thumb: #454a50;
-  --scroll-hover: #69717a;
+  --scroll-track: #101921;
+  --scroll-thumb: #786d55;
+  --scroll-hover: #bba477;
   color: var(--ink);
-  background: #0b0d0f;
+  background: #091118;
 }
 body {
   background:
@@ -25,7 +26,7 @@ select {
   font: inherit;
 }
 button {
-  background: #1b1d20;
+  background: #18252f;
   border-color: var(--line);
   color: var(--ink);
   border-radius: 6px;
@@ -38,7 +39,7 @@ button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 2px solid var(--green);
+  outline: 2px solid var(--gold);
   outline-offset: 3px;
 }
 input,
@@ -50,7 +51,7 @@ a:hover {
 }
 .up,
 .success {
-  color: var(--green);
+  color: var(--gold);
 }
 .down,
 .error {
@@ -77,8 +78,8 @@ a:hover {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-family: Arial, sans-serif;
-  letter-spacing: -1px;
+  font-family: "Manrope", sans-serif;
+  letter-spacing: 3px;
   font-size: 23px;
   font-weight: 750;
 }
@@ -89,7 +90,7 @@ a:hover {
   color: #eee;
 }
 .exchange-header .wordmark > span {
-  color: var(--green);
+  color: var(--gold);
 }
 .exchange-header .world-nav {
   display: flex;
@@ -113,7 +114,7 @@ a:hover {
 .exchange-header .world-nav a.selected:after {
   content: "";
   height: 2px;
-  background: var(--green);
+  background: var(--gold);
   bottom: 11px;
   left: 0;
   right: 0;
@@ -128,7 +129,7 @@ a:hover {
   width: 250px;
   padding: 8px 10px;
   color: #898d93;
-  background: #141618;
+  background: #101b24;
   font-size: 12px;
 }
 .global-search kbd {
@@ -196,7 +197,7 @@ a:hover {
   gap: 20px;
   padding: 0 24px !important;
   margin: 0 !important;
-  background: #111315f5;
+  background: #101921f5;
   border-top: 1px solid var(--line);
   font-size: 10px !important;
   color: var(--muted);
@@ -222,7 +223,7 @@ a:hover {
 .search-dialog {
   padding: 0;
   border: 1px solid #35393e;
-  background: #141618;
+  background: #101b24;
   color: #eee;
   border-radius: 13px;
   width: min(580px, calc(100vw - 30px));
@@ -314,7 +315,7 @@ a:hover {
   display: none;
 }
 .terminal-app h1 {
-  font-family: inherit;
+  font-family: "Manrope", sans-serif;
   font-size: 25px;
   letter-spacing: -0.8px;
   font-weight: 650;
@@ -330,7 +331,7 @@ a:hover {
   color: var(--muted);
 }
 .condition .dot {
-  background: var(--green);
+  background: var(--gold);
   box-shadow: none;
 }
 .view-coin .intro {
@@ -342,7 +343,7 @@ a:hover {
 }
 .terminal-app .panel,
 .terminal-panel {
-  background: #111315ed;
+  background: #101921ed;
   border: 1px solid var(--line);
   border-radius: 10px;
   box-shadow: none;
@@ -408,9 +409,9 @@ a:hover {
   border-color: transparent;
 }
 .intervals button.active {
-  color: var(--green);
-  background: #77d99b15;
-  border-color: #77d99b28;
+  color: var(--gold);
+  background: #c9b48c15;
+  border-color: #c9b48c28;
 }
 .coin-metrics {
   display: flex;
@@ -432,7 +433,7 @@ a:hover {
   text-transform: capitalize;
 }
 .coin-metrics .up {
-  color: var(--green);
+  color: var(--gold);
 }
 .coin-metrics .down {
   color: var(--red);
@@ -457,13 +458,13 @@ a:hover {
   gap: 6px;
 }
 .tabs button {
-  background: #1b1d20;
+  background: #18252f;
   border-color: var(--line);
 }
 .tabs button.active {
-  color: var(--green);
-  border-color: #77d99b35;
-  background: #77d99b14;
+  color: var(--gold);
+  border-color: #c9b48c35;
+  background: #c9b48c14;
 }
 .order-ticket .tabs {
   margin: 15px 0 22px;
@@ -504,7 +505,7 @@ a:hover {
   width: 100%;
   font-size: 12px;
   padding: 12px;
-  background: var(--green);
+  background: var(--gold);
   color: #102016;
   border: 1px solid transparent;
   font-weight: 650;
@@ -597,7 +598,7 @@ a:hover {
   margin-left: auto;
   min-width: 0;
   padding: 8px 11px;
-  background: #191c1f;
+  background: #101b24;
   border: 1px solid var(--line);
   color: #eee;
   border-radius: 6px;
@@ -606,7 +607,7 @@ a:hover {
   font: inherit;
   font-size: 11px;
   color: #b1b5bb;
-  background: #191c1f;
+  background: #101b24;
   border: 1px solid var(--line);
   padding: 7px;
   border-radius: 5px;
@@ -673,9 +674,9 @@ a:hover {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  color: var(--green);
-  background: #77d99b0b;
-  border: 1px solid #77d99b30;
+  color: var(--gold);
+  background: #c9b48c0b;
+  border: 1px solid #c9b48c30;
   padding: 6px 12px;
   font-size: 11px;
 }
@@ -718,12 +719,12 @@ a:hover {
   color: var(--muted);
 }
 .feed-status i {
-  background: var(--green);
+  background: var(--gold);
   box-shadow: none;
 }
 .feed-status[data-status="connecting"] i,
 .feed-status[data-status="offline"] i {
-  background: #8c9097;
+  background: #8fa0ad;
 }
 .pulse-controls {
   gap: 9px;
@@ -736,7 +737,7 @@ a:hover {
   font-size: 11px;
 }
 .quick-label {
-  background: #1b1d20;
+  background: #18252f;
   border-color: var(--line);
   padding: 8px 11px;
   font-size: 11px;
@@ -767,7 +768,7 @@ a:hover {
   color: #a2baa9;
 }
 .launch-strip .dot {
-  background: var(--green);
+  background: var(--gold);
   box-shadow: none;
 }
 .terminal-app .whale-watch {
@@ -776,7 +777,7 @@ a:hover {
   gap: 14px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: #111315d9;
+  background: #101921d9;
 }
 .whale-watch-title {
   min-width: 88px;
@@ -798,8 +799,8 @@ a:hover {
   min-width: 170px;
   border-radius: 5px;
   padding: 6px 10px;
-  background: #191c1f;
-  border-color: #2b3035;
+  background: #101b24;
+  border-color: #2a3b47;
 }
 .whale-watch-trades button > span {
   font-size: 11px;
@@ -834,7 +835,7 @@ a:hover {
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: #111315eb;
+  background: #101921eb;
   overflow: hidden;
 }
 .pulse-column-header {
@@ -917,8 +918,8 @@ a:hover {
   color: #a9afb5;
 }
 .column-options .has-filters {
-  color: var(--green);
-  border-color: #77d99b55;
+  color: var(--gold);
+  border-color: #c9b48c55;
 }
 .column-held {
   min-height: 23px;
@@ -930,11 +931,11 @@ a:hover {
   color: #737d85;
 }
 .column-held.is-held {
-  background: #77d99b08;
+  background: #c9b48c08;
   color: #b6c9bd;
 }
 .column-held button {
-  color: var(--green);
+  color: var(--gold);
   font-size: 9px;
 }
 .pulse-scroll {
@@ -980,7 +981,7 @@ a:hover {
   font-size: 8px;
   border-color: #46584b;
   background: #17211b;
-  color: var(--green);
+  color: var(--gold);
 }
 .pulse-identity strong {
   font-size: 13px;
@@ -1025,7 +1026,7 @@ a:hover {
   background: #2b3033;
 }
 .pulse-progress i {
-  background: #77d99b;
+  background: #c9b48c;
 }
 .pulse-card-foot {
   margin-top: 9px;
@@ -1036,8 +1037,8 @@ a:hover {
 }
 .pulse-card-foot button {
   padding: 4px 8px;
-  border: 1px solid #77d99b40;
-  background: #77d99b10;
+  border: 1px solid #c9b48c40;
+  background: #c9b48c10;
   color: #98dfb1;
   font-size: 10px;
   border-radius: 4px;
@@ -1102,7 +1103,7 @@ a:hover {
   color: #eee;
 }
 .filter-heading button {
-  color: var(--green);
+  color: var(--gold);
 }
 /* Portfolio and population use the same working surfaces, never invented PnL. */
 .portfolio-summary,
@@ -1191,8 +1192,8 @@ a:hover {
 }
 .agent-badge {
   font-size: 8px;
-  border-color: #77d99b33;
-  background: #77d99b0a;
+  border-color: #c9b48c33;
+  background: #c9b48c0a;
   color: #95cda6;
   padding: 4px 5px;
 }
@@ -1319,14 +1320,14 @@ a:hover {
   .pulse-mobile-tabs button {
     flex: 1;
     font-size: 11px;
-    background: #191c1f;
+    background: #101b24;
     border-color: var(--line);
     padding: 10px 5px;
   }
   .pulse-mobile-tabs button.active {
-    background: #77d99b18;
-    border-color: #77d99b55;
-    color: var(--green);
+    background: #c9b48c18;
+    border-color: #c9b48c55;
+    color: var(--gold);
   }
   .pulse-mobile-tabs small {
     font-size: 9px;
@@ -1374,7 +1375,7 @@ a:hover {
     font-size: 11px;
   }
   .exchange-header .world-nav a.selected {
-    color: var(--green);
+    color: var(--gold);
   }
   .exchange-header .world-nav a.selected:after {
     bottom: 7px;
@@ -1616,7 +1617,7 @@ a:hover {
   background: #ffffff04;
 }
 .pulse-open:focus-visible {
-  outline-color: var(--green);
+  outline-color: var(--gold);
 }
 .pulse-card {
   padding: 11px 0;
@@ -1686,7 +1687,7 @@ a:hover {
   min-height: 66px;
   padding: 8px 12px;
   margin-bottom: 12px;
-  background: #111315dd;
+  background: #101921dd;
   border: 1px solid var(--line);
   border-radius: 7px;
   flex-shrink: 0;
@@ -1697,7 +1698,7 @@ a:hover {
 }
 .hot-markets-label strong {
   font-size: 12px;
-  color: var(--green);
+  color: var(--gold);
 }
 .hot-markets-label small {
   display: block;
@@ -1719,8 +1720,8 @@ a:hover {
   gap: 9px;
   align-items: center;
   text-align: left;
-  background: #1a1d20;
-  border: 1px solid #2b3035;
+  background: #14212c;
+  border: 1px solid #2a3b47;
   padding: 7px 10px;
   border-radius: 5px;
 }
@@ -1763,7 +1764,7 @@ a:hover {
   max-width: 340px;
   margin-right: auto;
   border: 1px solid var(--line);
-  background: #191c1f;
+  background: #101b24;
   padding: 10px 12px;
   border-radius: 6px;
 }
@@ -1809,4 +1810,64 @@ a:hover {
   display: flex;
   align-items: center;
   gap: 5px;
+}
+
+/* Restore NORX's navy/gold identity; trade direction retains financial colors. */
+.up,
+.success {
+  color: var(--green);
+}
+.feed-status i,
+.launch-strip .dot,
+.condition .dot {
+  background: var(--green);
+}
+.exchange-header .logo {
+  font-family: "Manrope", sans-serif;
+  letter-spacing: 4px;
+  font-size: 25px;
+}
+.exchange-header .wordmark {
+  color: #e7ebed;
+}
+.exchange-header .wordmark > span {
+  color: var(--gold);
+}
+.primary:hover {
+  background: #ddc99f;
+}
+.terminal-app .primary {
+  color: #101921;
+}
+.table-buy {
+  color: var(--green);
+  background: #6ad2ac0c;
+  border-color: #6ad2ac38;
+}
+.pulse-card-foot button {
+  color: #9ed9ba;
+  background: #26382f77;
+  border-color: #3c4947;
+}
+.pulse-progress i {
+  background: linear-gradient(90deg, #748b98, var(--gold));
+}
+.discover-overview {
+  margin: 0 0 16px;
+}
+.discover-overview .whale-watch {
+  margin-bottom: 0;
+}
+@media (max-width: 700px) {
+  .exchange-header .logo {
+    font-size: 23px;
+    letter-spacing: 3px;
+  }
+}
+.exchange-header .world-nav a.selected {
+  color: var(--gold);
+}
+.column-presets button.selected {
+  background: #c9b48c1a;
+  color: #dfcba3;
 }

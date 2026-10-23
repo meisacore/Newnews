@@ -1,12 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import {
-  Search,
-  UserRound,
-  ArrowUpRight,
-  X,
-  Command,
-  Sparkles,
-} from "lucide-react";
+import { Search, UserRound, ArrowUpRight, X, Command } from "lucide-react";
 import { simulationDisplay } from "./marketState";
 export const usd = (n) =>
   new Intl.NumberFormat("en-US", {
@@ -64,9 +57,8 @@ export function ExchangeHeader({ state, me, auth, route, selected, onOpen }) {
     <>
       <header className="exchange-header">
         <a className="logo" href="/" aria-label="NORX welcome">
-          <Sparkles size={21} />
           <span className="wordmark">
-            norx<span>.</span>
+            NOR<span>X</span>
           </span>
         </a>
         <nav className="world-nav" aria-label="World navigation">

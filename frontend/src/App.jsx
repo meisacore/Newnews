@@ -7,6 +7,8 @@ import {
 import "./style.css";
 import Pulse from "./Pulse";
 import Agents from "./Agents";
+import HotMarkets from "./HotMarkets";
+import WhaleWatch from "./WhaleWatch";
 import { Discover, Activity } from "./Terminal";
 import { ExchangeHeader, ExchangeFooter, Portfolio } from "./ExchangeChrome";
 import "./terminal.css";
@@ -54,10 +56,10 @@ function Chart({ coin, interval, refresh }) {
     const c = createChart(el.current, {
       height: 420,
       autoSize: true,
-      layout: { background: { color: "#111315" }, textColor: "#8d9299" },
+      layout: { background: { color: "#101921" }, textColor: "#90a0ab" },
       grid: {
-        vertLines: { color: "#202327" },
-        horzLines: { color: "#202327" },
+        vertLines: { color: "#1a2630" },
+        horzLines: { color: "#1a2630" },
       },
       timeScale: { timeVisible: true },
       rightPriceScale: { borderColor: "#292d31" },
@@ -362,6 +364,12 @@ export function App({ auth }) {
         <p className="market-picker-note">
           Choose a coin below to open its chart and USD trade ticket.
         </p>
+      )}
+      {route.view === "discover" && (
+        <section className="discover-overview" aria-label="Market activity">
+          <HotMarkets state={state} onOpen={openCoin} />
+          <WhaleWatch state={state} onOpen={openCoin} busy={busy} />
+        </section>
       )}
       {(route.view === "discover" || route.view === "trade") && (
         <Discover

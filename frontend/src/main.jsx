@@ -14,7 +14,7 @@ class StartupBoundary extends React.Component {
         <div id="startup">
           <div className="startup-card">
             <div className="startup-brand">
-              norx<span>.</span>
+              NOR<span>X</span>
             </div>
             <h1>The exchange could not start.</h1>
             <p id="startup-details">{this.state.error.message}</p>

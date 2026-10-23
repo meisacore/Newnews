@@ -203,7 +203,7 @@ sharply; no agent may spend money it does not have or empty a pool. Global
 cooldowns prevent one bot trading every sampled coin in the same tick.
 
 The **Agents** tab shows personalities, available cash, one-time grants, trade
-counts, exposure limits, and each agent's biggest buy. **Whale watch** on Pulse
+counts, exposure limits, and each agent's biggest buy. **Whale watch** on Discover
 retains the ten latest trades of $1,000 or more; opening an item shows its coin's
 chart. Trade activity includes agent names and the rule behind their decision.
 Wealth does not imply good judgment, and disciplined rules do not guarantee a
@@ -281,8 +281,8 @@ routes. Use a separate temporary `NORX_DB` for this test.
 
 ### Reference interface redesign
 
-The uploaded `trial-main.zip` is a visual reference. NORX now uses its charcoal
-surfaces, green accents, slim header, separate full-height Pulse columns, presets
+The uploaded `trial-main.zip` is a visual reference. NORX uses the reference's layout with its own navy surfaces,
+gold accents, slim header, separate full-height Pulse columns, presets
 in column headers, fixed status bar, and floating mobile navigation. NORX's star
 field and animated welcome remain; the welcome typography and button match the
 exchange. The reference's disconnected pages and placeholder controls are not
@@ -299,7 +299,7 @@ existing virtual-money/agent rules remain unchanged.
 
 The terminal browser check also exercises global search, saved portfolio rows,
 three desktop columns, and five routes at mobile width. The Pulse control check
-expects the current neutral charcoal scrollbar rather than the former gold one.
+checks the themed navy tracks and muted gold scrollbars on Discover.
 
 [View the updated Pulse interface](docs/interface-preview.png) (captured from the
 running NORX simulation, with real simulated coins and agent activity).
@@ -329,7 +329,7 @@ from the repository root to check the Vite startup path and module-load failure 
 
 Trade opens `#trade`, a searchable market picker, instead of linking to a default
 FROG chart. Selecting any market opens that market's chart and USD ticket.
-Pulse has a Trending strip; Discover and the picker have a Trending · 5m tab and
+Discover contains the Trending strip and Whale watch. Discover and the picker have a Trending · 5m tab and
 sorts for heat or recent buy USD. The API aggregates actual five-minute buy/sell
 USD, buy/sell counts, and distinct buyers across every coin, including older coins
 outside the latest launch feed. Heat is buy USD × log2(2 + distinct buyers) × the
@@ -357,3 +357,15 @@ participation, rolling heat, distinct buyer counts, and older hot markets.
 `scripts/smoke_heat.py` checks the picker, chosen coin chart, actual trending data,
 pagination, search, the star background, and mobile layouts against a running
 backend. Restart both backend and frontend after updating to activate the crowd.
+
+### NORX branding and focused Pulse
+
+Pulse contains the three launch-stage feeds, search, presets, and launch countdown.
+Trending and Whale watch are on Discover, where their chart navigation and
+scroll controls continue to work. NORX is uppercase with a gold X throughout the
+header, welcome, and startup screen. The original DM Sans body and Manrope
+interface headings are restored, with Cormorant Garamond on the welcome page.
+Navy surfaces, gold accents, and stars are retained; buys/gains remain green and
+sells/losses red. Fonts are self-hosted under `frontend/public/fonts` with their
+SIL Open Font License files and `font-display: swap`, so no Google Fonts request
+blocks startup.

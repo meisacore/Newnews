@@ -130,13 +130,16 @@ with sync_playwright() as p:
     page.locator(".feed-status").filter(has_text="Live simulation").wait_for(
         timeout=10000
     )
+    assert page.locator(".whale-watch-trades,.hot-markets").count() == 0
+    page.get_by_role("link", name="Discover", exact=True).click()
+    page.locator(".whale-watch-trades").wait_for()
     assert page.locator(".whale-watch-trades").count(), (
         "Need at least one actual large trade to test its scrollbar"
     )
     color = page.locator(".whale-watch-trades").evaluate(
         "(el)=>getComputedStyle(el).scrollbarColor"
     )
-    assert "69, 74, 80" in color, color
+    assert "120, 109, 85" in color, color
     right = page.get_by_role("button", name="Scroll large trades right", exact=True)
     if right.is_enabled():
         right.click()
@@ -160,6 +163,7 @@ with sync_playwright() as p:
         )
     )
     # Capture the real stream separately: no intercepted or reconstructed reference data.
+    page.get_by_role("link", name="Pulse", exact=True).click()
     page.unroute("**/api/state*")
     page.reload(wait_until="domcontentloaded")
     page.locator(".feed-status").filter(has_text="Live simulation").wait_for()
