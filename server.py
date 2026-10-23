@@ -12,7 +12,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, StrictInt
 from economy import Market
-from paths import database_path
+from paths import database_path, world_path
 from worker import SimulationRunner
 
 DEFAULT_APP_ID = json.loads((Path(__file__).parent / "app-config.json").read_text())[
@@ -33,9 +33,8 @@ def current_market(x_norx_world: str = Header(default="balanced")):
         return market
     with world_lock:
         if x_norx_world not in worlds:
-            path = Path(market.path)
             worlds[x_norx_world] = Market(
-                path.with_name(path.stem + "-" + x_norx_world + path.suffix),
+                world_path(market.path, x_norx_world),
                 scenario=x_norx_world,
             )
         chosen = worlds[x_norx_world]

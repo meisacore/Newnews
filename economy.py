@@ -3,11 +3,11 @@
 import json
 import math
 import random
-import sqlite3
 import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
+from storage import PostgresTarget, connection
 from scenarios import SCENARIOS
 from health import simulation_status
 from personalities import PERSONALITIES, WEALTHY_ENTRANTS, intention
@@ -23,12 +23,7 @@ TRADER_POPULATION = 2000
 DECISIONS_PER_TICK = 256
 
 
-class Market:
-    def __init__(self, path, scenario=None):
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self.path = str(path)
-        with self.connection() as db:
-            db.executescript("""
+SCHEMA = """
             PRAGMA journal_mode=WAL;
             CREATE TABLE IF NOT EXISTS accounts(id TEXT PRIMARY KEY, cash INTEGER NOT NULL CHECK(cash>=0), kind TEXT NOT NULL, strategy TEXT, risk REAL, patience REAL);
             CREATE TABLE IF NOT EXISTS holdings(account TEXT, coin TEXT, qty INTEGER NOT NULL CHECK(qty>=0), PRIMARY KEY(account,coin));
@@ -43,7 +38,16 @@ class Market:
             CREATE INDEX IF NOT EXISTS launch_time ON launches(created_at);
             CREATE TABLE IF NOT EXISTS agent_personas(account TEXT PRIMARY KEY, name TEXT NOT NULL, persona TEXT NOT NULL, next_tick INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE IF NOT EXISTS agent_grants(account TEXT PRIMARY KEY, amount INTEGER NOT NULL, created_at INTEGER NOT NULL);
-            """)
+            """
+
+
+class Market:
+    def __init__(self, path, scenario=None):
+        if not isinstance(path, PostgresTarget):
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+        self.path = path if isinstance(path, PostgresTarget) else str(path)
+        with self.connection() as db:
+            db.executescript(SCHEMA)
             db.execute("BEGIN IMMEDIATE")
             if not db.execute("SELECT 1 FROM coins").fetchone():
                 for coin, name, symbol, price in [
@@ -321,12 +325,8 @@ class Market:
 
     @contextmanager
     def connection(self):
-        db = sqlite3.connect(self.path, timeout=15)
-        db.row_factory = sqlite3.Row
-        try:
+        with connection(self.path) as db:
             yield db
-        finally:
-            db.close()
 
     @contextmanager
     def transaction(self):
@@ -369,7 +369,7 @@ class Market:
                 "positions": [
                     dict(r)
                     for r in db.execute(
-                        "SELECT c.id,c.name,c.symbol,h.qty,CAST(c.cash AS REAL)/c.tokens/? AS price FROM holdings h JOIN coins c ON c.id=h.coin WHERE h.account=? AND h.qty>0 ORDER BY c.symbol",
+                        "SELECT c.id,c.name,c.symbol,h.qty,CAST(c.cash AS DOUBLE PRECISION)/c.tokens/? AS price FROM holdings h JOIN coins c ON c.id=h.coin WHERE h.account=? AND h.qty>0 ORDER BY c.symbol",
                         (UNIT, identity),
                     )
                 ],
@@ -449,7 +449,7 @@ class Market:
             if not updated.rowcount:
                 raise ValueError("Insufficient USD")
             db.execute(
-                "INSERT INTO holdings VALUES(?,?,?) ON CONFLICT(account,coin) DO UPDATE SET qty=qty+excluded.qty",
+                "INSERT INTO holdings VALUES(?,?,?) ON CONFLICT(account,coin) DO UPDATE SET qty=holdings.qty+excluded.qty",
                 (identity, c["id"], qty),
             )
             db.execute(
@@ -736,7 +736,7 @@ class Market:
                     """SELECT coin,
                     SUM(CASE WHEN side='buy' THEN amount ELSE 0 END) AS buys,
                     SUM(CASE WHEN side='sell' THEN amount ELSE 0 END) AS sells,
-                    SUM(side='buy') AS buy_count,SUM(side='sell') AS sell_count,
+                    SUM(CASE WHEN side='buy' THEN 1 ELSE 0 END) AS buy_count,SUM(CASE WHEN side='sell' THEN 1 ELSE 0 END) AS sell_count,
                     COUNT(DISTINCT CASE WHEN side='buy' THEN account END) AS buyers,
                     COUNT(DISTINCT account) AS traders,COUNT(*) AS txns,SUM(amount) AS volume
                     FROM trades WHERE ts>=? AND ts<=? GROUP BY coin""",

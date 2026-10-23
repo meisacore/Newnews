@@ -6,11 +6,14 @@ from pathlib import Path
 
 from filelock import FileLock, Timeout
 
+from storage import PostgresTarget, postgres_worker_lock
 from economy import Market
 from paths import database_path
 
 
 def worker_lock(path):
+    if isinstance(path, PostgresTarget):
+        return postgres_worker_lock(path)
     database = Path(path).resolve()
     database.parent.mkdir(parents=True, exist_ok=True)
     return FileLock(str(database) + ".worker.lock", timeout=0)
@@ -18,7 +21,9 @@ def worker_lock(path):
 
 class SimulationRunner:
     def __init__(self, path, interval=2):
-        self.path = str(Path(path).resolve())
+        self.path = (
+            path if isinstance(path, PostgresTarget) else str(Path(path).resolve())
+        )
         self.interval = interval
         self.stopped = threading.Event()
         self.thread = None
@@ -26,10 +31,13 @@ class SimulationRunner:
     def run_forever(self):
         while not self.stopped.is_set():
             try:
-                with worker_lock(self.path):
+                with worker_lock(self.path) as ownership:
                     market = Market(self.path)
                     logging.info("NORX simulation running; virtual USD only")
                     while not self.stopped.is_set():
+                        if isinstance(self.path, PostgresTarget):
+                            # Detect a lost ownership session before another tick.
+                            ownership.execute("SELECT 1")
                         try:
                             market.tick()
                         except Exception:

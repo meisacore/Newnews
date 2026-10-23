@@ -4,6 +4,16 @@ A fictional USD trading world with Privy authentication, persistent portfolios,
 2,000 rule-based agents per world with different wealth and judgment, shared AMM liquidity, trade-derived candles, the original animated starry welcome page, and a live three-column Pulse feed.
 No blockchain, wallets, deposits, withdrawals, LLMs, or external price feed.
 
+## Saved data / Supabase
+
+SQLite remains the default for local development. To use your Supabase PostgreSQL
+project, follow [the Windows migration and setup guide](docs/supabase-setup.md).
+Set the backend-only `DATABASE_URL` to a Session pooler URI on port 5432. Each
+economy uses a separate private schema, with finite integer balances and serialized
+ledger writes. Privy remains the identity provider; database credentials never go
+to the browser. Migrate existing SQLite worlds **before** starting a fresh
+PostgreSQL market. The importer previews by default and refuses overwrite.
+
 ## Development
 
 Requires Python 3.10+ and Node 22+ (the current Privy SDK may require a recent Node).
