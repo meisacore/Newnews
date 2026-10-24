@@ -1,3 +1,10 @@
+import {
+  readRoute,
+  routePath,
+  navigate,
+  startNavigation,
+  canonicalizeLegacy,
+} from "./routing";
 import React, { useEffect, useRef, useState } from "react";
 import {
   createChart,
@@ -139,21 +146,12 @@ function Chart({ coin, interval, refresh, range, world }) {
     </>
   );
 }
-function readRoute() {
-  const hash = window.location.hash.slice(1);
-  if (hash.startsWith("coin/"))
-    return { view: "coin", coin: decodeURIComponent(hash.slice(5)) };
-  return {
-    view: ["pulse", "discover", "trade", "portfolio", "agents"].includes(hash)
-      ? hash
-      : "pulse",
-  };
-}
 export function App({ auth }) {
+  useEffect(() => startNavigation(), []);
   const [world, setWorld] = useState(readWorld);
   function changeWorld(id) {
     localStorage.setItem("norx.world", id);
-    window.location.hash = "pulse";
+    navigate("/pulse");
     setWorld(id);
   }
   return (
@@ -250,16 +248,21 @@ function WorldApp({ auth, world, onWorld }) {
   }, [selection, includeAgents]);
   useEffect(() => {
     const update = () => {
+      canonicalizeLegacy();
       const next = readRoute();
       setRoute(next);
       if (next.coin) setSelected(next.coin);
       setQuote(null);
     };
     window.addEventListener("hashchange", update);
-    return () => window.removeEventListener("hashchange", update);
+    window.addEventListener("popstate", update);
+    return () => {
+      window.removeEventListener("hashchange", update);
+      window.removeEventListener("popstate", update);
+    };
   }, []);
   function openCoin(id) {
-    window.location.hash = "coin/" + encodeURIComponent(id);
+    navigate(routePath({ view: "coin", coin: id }));
   }
   function prepareBuy(id, value) {
     setSide("buy");
@@ -446,7 +449,7 @@ function WorldApp({ auth, world, onWorld }) {
         />
       )}
       {route.view === "coin" && (
-        <a className="back-to-pulse" href="#pulse">
+        <a className="back-to-pulse" href="/pulse">
           ← Back to Pulse
         </a>
       )}

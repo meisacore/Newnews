@@ -211,3 +211,28 @@ snapshots and engine settings can stay in place. This adds/replaces SQL function
 not a repeat data import. After deployment, reload the site and inspect
 `npx wrangler tail` for any new CPU failures. Hyperdrive query caching must remain
 disabled; do not remove your existing binding when copying updates.
+
+## Clean page URLs and NORX favicon
+
+Public page addresses are `/pulse`, `/discover`, `/trade`, `/trade/<token-id>`,
+`/portfolio`, and `/agents`. The star welcome page stays at `/`. The internal
+`market.html` file is served behind these paths; old `market.html#...` bookmarks
+are converted to the corresponding clean URL in the browser. Back/Forward and
+refreshing a token page work normally. Both welcome and exchange HTML include the
+navy/gold NORX SVG favicon at `/favicon.svg`.
+
+For an existing Windows deployment, update from the repository root:
+
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/meisacore/Newnews/main/scripts/update_clean_routes.ps1" -OutFile ".\scripts\update_clean_routes.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\update_clean_routes.ps1"
+cd cloudflare
+npm run deploy
+```
+
+The helper updates the route/icon files and only the `run_worker_first` array in
+your local Wrangler configuration. Your Hyperdrive ID, secrets, and other settings
+stay in place. This change needs no database preparation or migration. Reload with
+Ctrl+Shift+R after publishing; an old cached favicon can take another tab opening
+to refresh. Plain file hosting must provide the same market-page fallback; Vite,
+the Python server, and the Worker already include it.

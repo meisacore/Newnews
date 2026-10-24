@@ -77,7 +77,7 @@ export function ExchangeHeader({
           ].map(([id, label]) => (
             <a
               key={id}
-              href={"#" + id}
+              href={"/" + id}
               className={
                 route.view === id ||
                 (label === "Trade" && route.view === "coin")
@@ -124,7 +124,7 @@ export function ExchangeHeader({
           <Waves size={17} />
         </button>
         <a
-          href="#portfolio"
+          href="/portfolio"
           className="equity-chip"
           title="Cash plus holdings valued at spot prices"
         >
@@ -369,7 +369,7 @@ export function Portfolio({ me, state, auth, onOpen }) {
                   <tr key={t.id}>
                     <td>{new Date(t.ts * 1000).toLocaleString()}</td>
                     <td>
-                      <a href={"#coin/" + encodeURIComponent(t.coin)}>
+                      <a href={"/trade/" + encodeURIComponent(t.coin)}>
                         {state?.coins.find((c) => c.id === t.coin)?.symbol ||
                           t.coin}
                       </a>

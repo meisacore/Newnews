@@ -1,22 +1,25 @@
-import os
 import asyncio
-import logging
-import threading
 import json
-from functools import lru_cache
-from scenarios import SCENARIOS
+import logging
+import os
+import re
+import threading
 from contextlib import asynccontextmanager
+from functools import lru_cache
 from pathlib import Path
+
 import jwt
 import psycopg
-from psycopg_pool import PoolTimeout
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
+from psycopg_pool import PoolTimeout
 from pydantic import BaseModel, Field, StrictInt
+
 from economy import Market
 from paths import database_path, world_path
-from worker import SimulationRunner
+from scenarios import SCENARIOS
 from snapshots import PublicSnapshots
+from worker import SimulationRunner
 
 DEFAULT_APP_ID = json.loads((Path(__file__).parent / "app-config.json").read_text())[
     "privy_app_id"
@@ -224,5 +227,19 @@ def trade(body: Execute, user=Depends(identity), market=Depends(current_market))
 
 
 DIST = Path(__file__).parent / "frontend" / "dist"
+
+
+class MarketFiles(StaticFiles):
+    async def get_response(self, path, scope):
+        if (
+            re.fullmatch(
+                r"(?:pulse|discover|trade(?:/[^/]+)?|portfolio|agents)/?", path
+            )
+            or path == "market"
+        ):
+            path = "market.html"
+        return await super().get_response(path, scope)
+
+
 if DIST.is_dir():
-    app.mount("/", StaticFiles(directory=DIST, html=True), name="frontend")
+    app.mount("/", MarketFiles(directory=DIST, html=True), name="frontend")

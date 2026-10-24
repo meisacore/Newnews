@@ -288,6 +288,16 @@ export default {
   async fetch(request, env, ctx) {
     const path = new URL(request.url).pathname;
     if (!path.startsWith("/api/")) {
+      if (
+        /^\/(?:pulse|discover|trade(?:\/[^/]+)?|portfolio|agents)\/?$/.test(
+          path,
+        ) ||
+        path === "/market"
+      ) {
+        return env.ASSETS.fetch(
+          new Request(new URL("/market.html", request.url), request),
+        );
+      }
       if (path === "/")
         return env.ASSETS.fetch(
           new Request(new URL("/index.html", request.url), request),

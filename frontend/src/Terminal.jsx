@@ -337,7 +337,7 @@ export function Activity({ state, selected, me }) {
                 <span>Available {money.unit}</span>
                 <b>{usd(me.cash)}</b>
               </div>
-              <a href="#portfolio">View portfolio ↗</a>
+              <a href="/portfolio">View portfolio ↗</a>
             </>
           ) : (
             <p className="muted">Sign in to see your saved position.</p>

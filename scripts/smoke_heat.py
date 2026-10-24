@@ -36,11 +36,11 @@ with sync_playwright() as p:
     )
     page.get_by_role("link", name="Trade", exact=True).click()
     page.get_by_role("heading", name="Trade", exact=True).wait_for()
-    assert page.url.endswith("#trade") and page.locator("#amount").count() == 0
+    assert page.url.endswith("/trade") and page.locator("#amount").count() == 0
     chosen = next(c for c in state["coins"] if c["id"] != "frog" and c["in_feed"])
     page.get_by_label("Search markets").fill(chosen["symbol"])
     page.locator(".screener-token").filter(has_text=chosen["symbol"]).first.click()
-    assert page.url.endswith("#coin/" + chosen["id"])
+    assert page.url.endswith("/trade/" + chosen["id"])
     page.get_by_role("heading", name="Trade token", exact=True).wait_for()
     page.get_by_role("link", name="Discover", exact=True).click()
     page.get_by_role("button", name="Trending", exact=True).click()

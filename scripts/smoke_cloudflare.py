@@ -29,13 +29,30 @@ async def run():
         page.on("pageerror", lambda e: errors.append(str(e)))
         await page.goto(base + "/", wait_until="domcontentloaded")
         await page.locator("a.enter").click(no_wait_after=True)
-        await page.wait_for_url("**/market.html#pulse", wait_until="domcontentloaded")
+        await page.wait_for_url("**/pulse", wait_until="domcontentloaded")
         await page.get_by_role("heading", name="Pulse", exact=True).wait_for(
             timeout=30000
         )
         await page.locator(".pulse-card").first.wait_for(timeout=20000)
+        assert page.url.endswith("/pulse")
+        icon = await page.request.get(base + "/favicon.svg")
+        assert icon.ok and "image/svg+xml" in icon.headers.get("content-type", "")
+        assert (
+            await page.locator('link[rel="icon"]').get_attribute("href")
+            == "/favicon.svg"
+        )
         await page.get_by_role("link", name="Discover", exact=True).click()
         await page.get_by_role("heading", name="Discover", exact=True).wait_for()
+        assert page.url.endswith("/discover")
+        await page.reload(wait_until="domcontentloaded")
+        await page.get_by_role("heading", name="Discover", exact=True).wait_for()
+        await page.get_by_role("link", name="Pulse", exact=True).click()
+        assert page.url.endswith("/pulse")
+        await page.go_back()
+        await page.get_by_role("heading", name="Discover", exact=True).wait_for()
+        await page.go_forward()
+        await page.get_by_role("heading", name="Pulse", exact=True).wait_for()
+        await page.get_by_role("link", name="Discover", exact=True).click()
         await page.screenshot(
             path=str(out / "norx-cloudflare-discover.png"), full_page=True
         )
@@ -45,6 +62,9 @@ async def run():
             .filter(has_text="Moon Frog")
             .wait_for(timeout=30000)
         )
+        assert page.url.endswith("/trade/frog")
+        await page.reload(wait_until="domcontentloaded")
+        await page.locator(".token-heading-identity h2").wait_for()
         await page.get_by_role("button", name="24h view", exact=True).click()
         await page.get_by_role("button", name="Expand trades").click()
         await page.get_by_role("button", name="Restore chart").wait_for()
@@ -69,7 +89,7 @@ async def run():
         print(
             json.dumps(
                 {
-                    "checks": "welcome, Pulse, Discover, token chart, expandable tray, mobile, auth required",
+                    "checks": "welcome, clean URLs, favicon, legacy bookmarks, refresh and history, Pulse, Discover, Agents, token chart, expandable tray, mobile, auth required",
                     "page_errors": errors,
                 }
             )

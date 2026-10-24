@@ -8,6 +8,17 @@ export default defineConfig(({ mode }) => {
   };
   const appId = env.VITE_PRIVY_APP_ID ?? appConfig.privy_app_id;
   return {
+    plugins: [
+      {
+        name: "norx-clean-routes",
+        configureServer(server) {
+          server.middlewares.use(marketPages);
+        },
+        configurePreviewServer(server) {
+          server.middlewares.use(marketPages);
+        },
+      },
+    ],
     define: { "import.meta.env.VITE_PRIVY_APP_ID": JSON.stringify(appId) },
     resolve: {
       alias: {
@@ -30,3 +41,13 @@ export default defineConfig(({ mode }) => {
     },
   };
 });
+
+function marketPages(req, res, next) {
+  const path = (req.url || "").split("?")[0];
+  if (
+    /^\/(?:pulse|discover|trade(?:\/[^/]+)?|portfolio|agents)\/?$/.test(path) ||
+    path === "/market"
+  )
+    req.url = "/market.html";
+  next();
+}

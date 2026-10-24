@@ -1,9 +1,11 @@
+import { canonicalizeLegacy } from "./routing";
 import React, { lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { PublicApp } from "./App";
 import { CurrencyProvider } from "./Currency";
 const PrivyRoot = lazy(() => import("@norx/auth-root"));
 const id = import.meta.env.VITE_PRIVY_APP_ID;
+canonicalizeLegacy();
 class StartupBoundary extends React.Component {
   state = { error: null };
   static getDerivedStateFromError(error) {
@@ -19,7 +21,7 @@ class StartupBoundary extends React.Component {
             </div>
             <h1>The exchange could not start.</h1>
             <p id="startup-details">{this.state.error.message}</p>
-            <a className="startup-reload" href="market.html">
+            <a className="startup-reload" href="/pulse">
               Reload exchange
             </a>
           </div>
