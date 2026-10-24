@@ -1,76 +1,40 @@
-import { POLICIES, SCENARIOS, ApiError } from "./config.js";
+import { POLICIES, SCENARIOS } from "./config.js";
 import { withDatabase, one, commit } from "./database.js";
-import { buildState } from "./state.js";
 import { logFailure } from "./diagnostics.js";
 
-// At most one batch per ten seconds per active world, regardless of user count.
-// Cron visits active worlds each minute. No catch-up launch flood after inactivity.
+// Aggregation and JSON assembly stay inside PostgreSQL. Only one boolean crosses
+// the wire for a refresh, rather than thousands of rows and a full snapshot twice.
 export async function advance(
   env,
   world,
   { visit = false, now = Math.floor(Date.now() / 1000) } = {},
 ) {
-  return withDatabase(env, world, async (db, schema) => {
-    const lock = await one(
+  return withDatabase(env, world, async (db) => {
+    db.norxStage = "simulation_refresh";
+    const result = await one(
       db,
-      "SELECT pg_try_advisory_xact_lock(hashtext($1)) AS acquired",
-      ["norx-write-" + schema],
+      "SELECT norx_refresh($1,$2,$3::jsonb,$4::jsonb) AS ready",
+      [now, visit, JSON.stringify(SCENARIOS[world]), JSON.stringify(POLICIES)],
     );
-    if (!lock.acquired) return null;
-    db.norxStage = "runtime_read";
-    const control = await one(db, "SELECT * FROM cloud_runtime WHERE id=1");
-    if (!control)
-      throw new ApiError(503, "Cloudflare database setup is incomplete");
-    if (visit) {
-      const waking = Number(control.active_until) < now;
-      // Throttle activity writes to once a minute. Cached requests need no writes.
-      if (Number(control.active_until) < now + 60)
-        await db.query("UPDATE cloud_runtime SET active_until=$1 WHERE id=1", [
-          now + 120,
-        ]);
-      if (waking && control.snapshot) {
-        await db.query("UPDATE meta SET value=$1 WHERE key='next_launch_at'", [
-          String(now + 60),
-        ]);
-      }
-    } else if (Number(control.active_until) < now) return null;
-    if (Number(control.next_batch_at) > now && control.snapshot)
-      return commit(db, control.snapshot);
-    const owner = await one(
-      db,
-      "SELECT value FROM meta WHERE key='simulation_engine'",
-    );
-    if (owner?.value !== "cloudflare")
-      throw new ApiError(
-        503,
-        "Activate the Cloudflare simulation using cloudflare/prepare.py --activate",
-      );
-    db.norxStage = "simulation_batch";
-    await db.query("SELECT norx_batch($1,$2::jsonb,$3::jsonb)", [
-      now,
-      JSON.stringify(SCENARIOS[world]),
-      JSON.stringify(POLICIES),
-    ]);
-    db.norxStage = "snapshot_build";
-    const snapshot = await buildState(db, now);
-    await db.query(
-      "UPDATE cloud_runtime SET snapshot=$1::jsonb,snapshot_at=$2,next_batch_at=$3 WHERE id=1",
-      [JSON.stringify(snapshot), now, now + 10],
-    );
-    return commit(db, snapshot);
+    return commit(db, result.ready);
   });
 }
-export async function readSnapshot(env, world) {
+export async function readSnapshot(
+  env,
+  world,
+  { selected = null, agents = false, now = Math.floor(Date.now() / 1000) } = {},
+) {
   return withDatabase(env, world, async (db) => {
-    const r = await one(
-      db,
-      "SELECT snapshot,snapshot_at,next_batch_at,active_until FROM cloud_runtime WHERE id=1",
-    );
-    return r;
+    db.norxStage = "snapshot_read";
+    // Explicit text return: pg must not JSON.parse the large snapshot in Workers.
+    return one(db, "SELECT * FROM norx_snapshot($1,$2,$3)", [
+      now,
+      selected,
+      agents,
+    ]);
   });
 }
 export async function scheduled(env) {
-  // Sequential worlds bound DB concurrency and avoid four large responses at once.
   for (const world of Object.keys(SCENARIOS)) {
     try {
       await advance(env, world);

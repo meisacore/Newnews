@@ -1,7 +1,7 @@
 import { databaseFailure, logFailure } from "./diagnostics.js";
 import { ApiError, SCENARIOS, worldSchema } from "./config.js";
 import { withDatabase, one, commit } from "./database.js";
-import { account, candles, coinData, recentTrades } from "./state.js";
+import { account, candles } from "./state.js";
 import { advance, readSnapshot, scheduled } from "./runtime.js";
 import { identity } from "./auth.js";
 
@@ -51,6 +51,8 @@ function cacheKey(request, world) {
   if (original.pathname === "/api/state") {
     const selected = original.searchParams.get("selected");
     if (selected) url.searchParams.set("selected", selected);
+    if (original.searchParams.get("agents") === "1")
+      url.searchParams.set("agents", "1");
   } else {
     url.searchParams.set(
       "interval",
@@ -100,44 +102,46 @@ export async function api(
     const selected = url.searchParams.get("selected");
     if (selected && !text(selected, 32))
       throw new ApiError(400, "Invalid token");
-    let control = await readSnapshot(env, world);
-    if (!control?.snapshot) {
-      // A competing refresh can briefly own the lock: retry on the next poll.
-      const snapshot = await advance(env, world, { visit: true });
-      if (!snapshot)
+    const options = {
+      selected,
+      agents: url.searchParams.get("agents") === "1",
+    };
+    let control = await readSnapshot(env, world, options);
+    if (!control?.body) {
+      const ready = await advance(env, world, { visit: true });
+      if (!ready)
         throw new ApiError(503, "Market is starting. Please retry shortly.");
-      control = {
-        snapshot,
-        snapshot_at: nowSeconds(),
-        next_batch_at: nowSeconds() + 10,
-        active_until: nowSeconds() + 120,
-      };
+      control = await readSnapshot(env, world, options);
+      if (!control?.body)
+        throw new ApiError(503, "Market is starting. Please retry shortly.");
     } else if (
       Number(control.next_batch_at) <= nowSeconds() ||
       Number(control.active_until) < nowSeconds() + 60
     ) {
       background(ctx, advance(env, world, { visit: true }));
     }
-    value = structuredClone(control.snapshot);
-    const age = Math.max(0, nowSeconds() - Number(control.snapshot_at));
-    // Minute cron and request-driven batches have a wider heartbeat than Python.
-    value.simulation = {
-      running: age <= 90,
-      status: age <= 20 ? "live" : age <= 90 ? "delayed" : "paused",
-      last_tick_at: Number(control.snapshot_at),
-      age_seconds: age,
-    };
-    value.server_time = nowSeconds();
-    if (selected)
-      await withDatabase(env, world, async (db) => {
-        if (!value.coins.some((c) => c.id === selected)) {
-          const extra = await coinData(db, selected);
-          value.coins.push(
-            ...extra.coins.map((c) => ({ ...c, in_feed: false })),
-          );
-        }
-        value.coin_trades = await recentTrades(db, selected);
-      });
+    // Pass through database-generated JSON. No JSON parse, structuredClone or
+    // stringify of every coin and all 2,000 agents on each polling request.
+    const response = new Response(control.body, {
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+      },
+    });
+    if (key && edgeCache)
+      background(
+        ctx,
+        edgeCache.put(
+          key,
+          new Response(control.body, {
+            headers: {
+              "Content-Type": "application/json",
+              "Cache-Control": "public,max-age=5",
+            },
+          }),
+        ),
+      );
+    return response;
   } else if (/^\/api\/candles\/[^/]+$/.test(path) && request.method === "GET") {
     const interval = Number(url.searchParams.get("interval") || 60),
       range = Number(url.searchParams.get("range_seconds") || 7200);

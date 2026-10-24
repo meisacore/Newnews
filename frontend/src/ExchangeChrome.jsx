@@ -226,7 +226,7 @@ export function ExchangeFooter({ state, feedError }) {
         {feedError ? "Feed unavailable" : health.label}
       </span>
       <span>{state?.total_coins ?? "—"} markets</span>
-      <span>{state?.agents.length ?? "—"} agents</span>
+      <span>{state?.agent_count ?? state?.agents.length ?? "—"} agents</span>
       <span className="footer-economy">
         {state?.condition || "Connecting"} economy
       </span>

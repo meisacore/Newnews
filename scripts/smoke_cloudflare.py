@@ -51,6 +51,12 @@ async def run():
         await page.screenshot(
             path=str(out / "norx-cloudflare-token.png"), full_page=True
         )
+        await page.get_by_role("link", name="Agents", exact=True).click()
+        await page.locator(".agent-card").first.wait_for()
+        assert "2,000 traders" in await page.locator(".agent-browser").inner_text()
+        await page.get_by_role("link", name="Pulse", exact=True).click()
+        await page.locator(".pulse-card").first.wait_for()
+        assert "2000 agents" in await page.locator(".exchange-footer").inner_text()
         await page.set_viewport_size({"width": 390, "height": 844})
         await page.goto(base + "/market.html#pulse")
         await page.get_by_role("heading", name="Pulse", exact=True).wait_for()

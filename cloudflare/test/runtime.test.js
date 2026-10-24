@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { api, validateBody, errorResponse } from "../src/index.js";
 import { worldSchema, ApiError } from "../src/config.js";
 import { withDatabase, one, rows, databaseUrl } from "../src/database.js";
-import { advance } from "../src/runtime.js";
+import { advance, readSnapshot } from "../src/runtime.js";
+import { buildState } from "../src/state.js";
+import { POLICIES } from "../src/config.js";
 
 const url = process.env.NORX_TEST_PG_SCHEMA_PREFIX
   ? process.env.NORX_TEST_POSTGRES_URL
@@ -13,6 +15,12 @@ const env = {
   PRIVY_APP_ID: "test-app",
   NORX_PG_SCHEMA_PREFIX: process.env.NORX_TEST_PG_SCHEMA_PREFIX,
 };
+async function advanceImage(env, world, options = {}) {
+  if (!(await advance(env, world, options))) return null;
+  return JSON.parse(
+    (await readSnapshot(env, world, { agents: true, now: options.now })).body,
+  );
+}
 const verify = async () => "did:privy:cloud-test";
 const tasks = [];
 const ctx = {
@@ -105,7 +113,7 @@ test(
   "real PostgreSQL cutover: batches, conserved ledger, private trades and isolated worlds",
   { skip: !url },
   async () => {
-    const first = await advance(env, "balanced", { visit: true });
+    const first = await advanceImage(env, "balanced", { visit: true });
     assert.equal(first.api_version, 6);
     assert.equal(first.agents.length, 2000);
     assert.equal(first.coins[0].total_supply, 1e9);
@@ -140,6 +148,9 @@ test(
     assert.ok(account.cash < 10000 && account.cash >= 9950);
     assert.equal((await call("me", null, "bull")).cash, 10000);
     const state = await call("state?selected=frog");
+    assert.equal(state.agent_count, 2000);
+    assert.equal(state.agents.length, 0);
+    assert.equal((await call("state?agents=1")).agents.length, 2000);
     assert.equal(
       state.coin_trades.filter((t) => t.account === "did:privy:cloud-test")
         .length,
@@ -173,20 +184,108 @@ test(
       one(db, "SELECT count(*) AS count FROM coins"),
     );
     const future = Math.floor(Date.now() / 1000) + 65;
-    const batch = await advance(env, "balanced", { visit: true, now: future });
+    const batch = await advanceImage(env, "balanced", {
+      visit: true,
+      now: future,
+    });
     assert.equal(batch.total_coins, Number(count.count) + 5);
-    const duplicate = await advance(env, "balanced", {
+    const duplicate = await advanceImage(env, "balanced", {
       visit: true,
       now: future,
     });
     assert.equal(duplicate.total_coins, batch.total_coins);
     // A dormant world doesn't catch up hundreds of missed launches on wake.
-    const wake = await advance(env, "balanced", {
+    const wake = await advanceImage(env, "balanced", {
       visit: true,
       now: future + 1000,
     });
     assert.equal(wake.total_coins, batch.total_coins);
-    const idle = await advance(env, "balanced", { now: future + 2000 });
+    const idle = await advanceImage(env, "balanced", { now: future + 2000 });
     assert.equal(idle, null);
+  },
+);
+
+test(
+  "PostgreSQL snapshots preserve all public metrics at production-sized history",
+  { skip: !url },
+  async () => {
+    await withDatabase(env, "balanced", async (db) => {
+      // Disposable read-model fixture: large history reproduces the row volume
+      // that exceeded CPU when it was downloaded and rendered inside a Worker.
+      await db.query(`INSERT INTO coins(id,name,symbol,cash,tokens,reference)
+      SELECT 'cpu-'||n,'CPU fixture '||n,'CPU'||n,10000000000,100000000,.0001 FROM generate_series(1,2200) n`);
+      await db.query(
+        `INSERT INTO holdings(account,coin,qty) SELECT 'treasury',id,900000000 FROM coins WHERE id LIKE 'cpu-%'`,
+      );
+      await db.query(
+        `INSERT INTO launches(coin,created_at,seed_cash,activity_goal) SELECT id,$1-1000,10000000000,10000000000 FROM coins WHERE id LIKE 'cpu-%'`,
+        [Math.floor(Date.now() / 1000)],
+      );
+      await db.query(
+        `INSERT INTO trades(ts,account,coin,side,qty,amount,price,reason)
+      SELECT $1-(n%86400),'fixture-human-'||(n%1200),'cpu-'||(1+(n%2200)),
+        CASE WHEN n%3=0 THEN 'sell' ELSE 'buy' END,100,10000,.0001,'Read model fixture'
+      FROM generate_series(1,260000) n`,
+        [Math.floor(Date.now() / 1000)],
+      );
+      const now = Math.floor(Date.now() / 1000);
+      const legacy = await buildState(db, now);
+      const modern = (
+        await one(db, "SELECT norx_build_state($1,$2::jsonb) AS value", [
+          now,
+          JSON.stringify(POLICIES),
+        ])
+      ).value;
+      function same(actual, expected, path = "snapshot") {
+        if (typeof expected === "number") {
+          assert.ok(
+            Math.abs(actual - expected) <=
+              Math.max(1e-9, Math.abs(expected) * 1e-10),
+            path + ": " + actual + " != " + expected,
+          );
+          return;
+        }
+        if (Array.isArray(expected)) {
+          if (
+            path.endsWith("trending") ||
+            path.endsWith("screener") ||
+            path.endsWith("coins")
+          ) {
+            expected = [...expected].sort((a, b) => a.id.localeCompare(b.id));
+            actual = [...actual].sort((a, b) => a.id.localeCompare(b.id));
+          }
+          assert.equal(actual.length, expected.length, path + " length");
+          expected.forEach((v, i) => same(actual[i], v, path + "[" + i + "]"));
+          return;
+        }
+        if (expected && typeof expected === "object") {
+          assert.deepEqual(
+            Object.keys(actual).sort(),
+            Object.keys(expected).sort(),
+            path + " fields",
+          );
+          for (const k of Object.keys(expected))
+            same(actual[k], expected[k], path + "." + k);
+          return;
+        }
+        assert.equal(actual, expected, path);
+      }
+      // Exact selection among equally ranked heat scores can differ by stable tie
+      // ordering; compare every coin that both implementations include.
+      const expectedIds = new Set(legacy.coins.map((c) => c.id));
+      modern.coins = modern.coins.filter((c) => expectedIds.has(c.id));
+      const actualIds = new Set(modern.coins.map((c) => c.id));
+      legacy.coins = legacy.coins.filter((c) => actualIds.has(c.id));
+      const screenerIds = new Set(legacy.screener.map((c) => c.id));
+      modern.screener = modern.screener.filter((c) => screenerIds.has(c.id));
+      const seen = new Set(modern.screener.map((c) => c.id));
+      legacy.screener = legacy.screener.filter((c) => seen.has(c.id));
+      const trendIds = new Set(legacy.trending.map((c) => c.id));
+      modern.trending = modern.trending.filter((c) => trendIds.has(c.id));
+      const trendSeen = new Set(modern.trending.map((c) => c.id));
+      legacy.trending = legacy.trending.filter((c) => trendSeen.has(c.id));
+      same(modern, legacy);
+      // Large fixtures stay only in this rolled-back test transaction.
+    });
   },
 );

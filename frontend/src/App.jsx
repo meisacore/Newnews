@@ -187,6 +187,7 @@ function WorldApp({ auth, world, onWorld }) {
   const session = useRef(0);
   const feedRequest = useRef(0);
   const selection = route.view === "coin" ? selected : "";
+  const includeAgents = route.view === "agents";
   const feedSelection = useRef(selection);
   feedSelection.current = selection;
   const me = account
@@ -206,7 +207,9 @@ function WorldApp({ auth, world, onWorld }) {
     try {
       const data = validateMarketState(
         await worldApi(
-          "state?selected=" + encodeURIComponent(selection),
+          "state?selected=" +
+            encodeURIComponent(selection) +
+            (includeAgents ? "&agents=1" : ""),
           undefined,
           undefined,
           signal,
@@ -244,7 +247,7 @@ function WorldApp({ auth, world, onWorld }) {
       polling.stop();
       controller.abort();
     };
-  }, [selection]);
+  }, [selection, includeAgents]);
   useEffect(() => {
     const update = () => {
       const next = readRoute();
@@ -406,7 +409,8 @@ function WorldApp({ auth, world, onWorld }) {
             {state?.condition || "Connecting"} economy
             <br />
             <small>
-              {state?.agents.length || "—"} independent rule-based agents
+              {state?.agent_count ?? state?.agents.length ?? "—"} independent
+              rule-based agents
             </small>
           </div>
         </section>

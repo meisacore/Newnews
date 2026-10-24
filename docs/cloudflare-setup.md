@@ -115,7 +115,7 @@ unless you explicitly configure a proxy to this Worker.
   and token movements, fees, price limits and idempotent receipts stay in PostgreSQL
   transactions with the same world lock used by the previous engine. Existing
   Python receipts can be retried safely through the new API.
-* Public snapshots are generated once per batch and saved in Supabase. A five-second
+* Public snapshots are generated once per batch inside PostgreSQL and saved in Supabase. The Worker passes through the resulting JSON text rather than loading and transforming thousands of rows. Trader profiles are returned only on the Agents tab; other tabs receive the total agent count. A five-second
   Cloudflare public cache and the existing browser cache share reads. Selected-token
   history and candles remain real trade data. Cached public prices can lag a batch;
   private execution always checks the current pool. Portfolios/quotes/trades are
@@ -184,3 +184,30 @@ $env:NORX_DEV_AUTH="0"
 This returns the same Supabase ledger to the Python engine; it does not restore an
 old SQLite copy or discard trades made since deployment. The Cloudflare engine
 refuses new batches once the database mode is `python`.
+
+
+## Updating after a Worker CPU limit error
+
+If logs show `Exceeded CPU Limit`, install the updated SQL rendering functions and
+Worker code. Merely increasing polling intervals does not remove snapshot-building
+CPU from a request. The thin Worker path runs aggregation and JSON assembly in
+PostgreSQL and passes through JSON text; all 2,000 trader profiles load only on the
+Agents tab. This addresses the expensive path, but actual deployed usage must
+still fit your plan's CPU and request limits.
+
+Keep your local `cloudflare/wrangler.jsonc` when updating: it contains your live
+Hyperdrive binding ID. Keep `.env`, `.dev.vars`, `frontend/.env.local`, and data too.
+From the repository root, in the terminal with the working `DATABASE_URL`:
+
+```powershell
+.\.venv\Scripts\python cloudflare\prepare.py
+if ($LASTEXITCODE -ne 0) { throw "Database setup failed; stop here." }
+cd cloudflare
+npm run deploy
+```
+
+Omit `--activate` for this update: these worlds already use Cloudflare, and cached
+snapshots and engine settings can stay in place. This adds/replaces SQL functions,
+not a repeat data import. After deployment, reload the site and inspect
+`npx wrangler tail` for any new CPU failures. Hyperdrive query caching must remain
+disabled; do not remove your existing binding when copying updates.

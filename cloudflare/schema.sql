@@ -241,3 +241,159 @@ REVOKE ALL ON cloud_runtime FROM PUBLIC;
 REVOKE ALL ON FUNCTION norx_amount(bigint,bigint,text,bigint),norx_quantity(bigint,bigint,bigint),
   norx_trade(text,text,text,bigint,text),norx_quote(text,text,text,bigint,bigint,text),
   norx_execute(text,text,text),norx_batch(bigint,jsonb,jsonb) FROM PUBLIC;
+
+-- Keep aggregation/JSON assembly in PostgreSQL. Workers Free has a very small
+-- CPU budget: thousands of pg rows and repeated JSON copies cannot run there.
+CREATE OR REPLACE FUNCTION norx_policy_label(persona text)
+RETURNS text LANGUAGE sql IMMUTABLE AS $$
+  SELECT CASE persona WHEN 'patient_value' THEN 'Patient value investor'
+    WHEN 'careful_trend' THEN 'Disciplined trend trader' WHEN 'contrarian' THEN 'Cautious contrarian'
+    WHEN 'fomo' THEN 'FOMO chaser' WHEN 'gambler' THEN 'Impulsive gambler'
+    WHEN 'reckless_whale' THEN 'Reckless whale' WHEN 'retail_noise' THEN 'Casual small trader' END
+$$;
+
+CREATE OR REPLACE FUNCTION norx_public_trades(token text DEFAULT NULL,minimum bigint DEFAULT 0,row_limit integer DEFAULT 30)
+RETURNS jsonb LANGUAGE sql STABLE AS $$
+  SELECT coalesce(jsonb_agg(value ORDER BY id DESC),'[]'::jsonb) FROM (
+    SELECT t.id,to_jsonb(t)||jsonb_build_object(
+      'account',CASE WHEN p.account IS NULL THEN 'Player' ELSE t.account END,
+      'agent_name',coalesce(p.name,'Player'),'persona',norx_policy_label(p.persona)) AS value
+    FROM trades t LEFT JOIN agent_personas p ON p.account=t.account
+    WHERE (token IS NULL OR t.coin=token) AND t.amount>=minimum
+    ORDER BY t.id DESC LIMIT row_limit
+  ) public_rows
+$$;
+
+CREATE OR REPLACE FUNCTION norx_coin_data(now_s bigint,selected_token text DEFAULT NULL)
+RETURNS jsonb LANGUAGE sql STABLE AS $$
+WITH periods(label,seconds) AS (VALUES('5m',300),('1h',3600),('6h',21600),('24h',86400)),
+window_sums AS MATERIALIZED (
+ SELECT w.label,t.coin,sum(CASE WHEN side='buy' THEN amount ELSE 0 END)::double precision/1000000 AS buys,
+   sum(CASE WHEN side='sell' THEN amount ELSE 0 END)::double precision/1000000 AS sells,
+   count(*) FILTER(WHERE side='buy') AS buy_count,count(*) FILTER(WHERE side='sell') AS sell_count,
+   count(DISTINCT account) FILTER(WHERE side='buy') AS buyers,count(DISTINCT account) AS traders,
+   count(*) AS txns,sum(amount)::double precision/1000000 AS volume
+ FROM periods w JOIN trades t ON t.ts>=now_s-w.seconds AND t.ts<=now_s
+ WHERE selected_token IS NULL OR t.coin=selected_token GROUP BY w.label,t.coin
+),stats AS MATERIALIZED (
+ SELECT *,buys*(ln((2+buyers)::double precision)/ln(2::double precision))*buy_count/greatest(1,txns) AS score FROM window_sums
+),heat AS (
+ SELECT *,row_number() OVER(PARTITION BY label ORDER BY score DESC,coin) AS ranking FROM stats
+),hot AS (SELECT DISTINCT coin FROM heat WHERE ranking<=60),
+base AS (
+ SELECT c.*,l.created_at,l.activity_goal,l.seed_cash,
+   c.cash::double precision/c.tokens/1000000 AS price,
+   1000000000-(SELECT qty FROM holdings WHERE account='treasury' AND coin=c.id) AS circulation,
+   coalesce(t.volume,0) AS total_volume,coalesce(t.volume_24h,0) AS volume_24h,
+   coalesce(t.txns,0) AS txns,coalesce(h.holders,0) AS holders,
+   (SELECT price FROM trades WHERE coin=c.id AND ts>=now_s-86400 ORDER BY ts,id LIMIT 1) AS first_price
+ FROM coins c JOIN launches l ON l.coin=c.id
+ LEFT JOIN (SELECT coin,sum(amount) AS volume,sum(amount) FILTER(WHERE ts>=now_s-86400) AS volume_24h,count(*) AS txns
+   FROM trades WHERE selected_token IS NULL OR coin=selected_token GROUP BY coin) t ON t.coin=c.id
+ LEFT JOIN (SELECT coin,count(*) AS holders FROM holdings WHERE account!='treasury' AND qty>0
+   AND (selected_token IS NULL OR coin=selected_token) GROUP BY coin) h ON h.coin=c.id
+ WHERE selected_token IS NULL OR c.id=selected_token
+),progressed AS (
+ SELECT *,least(100,total_volume::double precision/activity_goal*100) AS progress FROM base
+),staged AS (
+ SELECT *,CASE WHEN progress>=100 THEN 'migrated' WHEN progress>=70 THEN 'stretch' ELSE 'new' END AS stage FROM progressed
+),ranked AS (
+ SELECT *,row_number() OVER(PARTITION BY stage ORDER BY created_at DESC,id) AS rn FROM staged
+),candidates AS (
+ SELECT r.* FROM ranked r WHERE rn<=60 OR id=selected_token OR id IN(SELECT coin FROM hot)
+),rendered AS MATERIALIZED (
+ SELECT c.id,c.created_at,c.rn,c.id=selected_token AS selected,c.id IN(SELECT coin FROM hot) AS is_hot,
+   coalesce(s.score,0) AS score,
+   jsonb_build_object('id',c.id,'name',c.name,'symbol',c.symbol,'price',c.price,
+     'circulating_supply',c.circulation,'total_supply',1000000000,'market_cap',c.price*c.circulation,
+     'fdv',c.price*1000000000,'volume_24h',c.volume_24h::double precision/1000000,
+     'change_24h',CASE WHEN c.first_price>0 THEN (c.price/c.first_price-1)*100 ELSE 0 END,
+     'pool_usd',c.cash::double precision/1000000,'created_at',c.created_at,'progress',c.progress,'stage',c.stage,
+     'txns',c.txns,'holders',c.holders,'in_feed',c.rn<=60,'buy_usd_5m',coalesce(s.buys,0),'sell_usd_5m',coalesce(s.sells,0),
+     'buyers_5m',coalesce(s.buyers,0),'buys_5m',coalesce(s.buy_count,0),'sells_5m',coalesce(s.sell_count,0),'heat_score',coalesce(s.score,0),
+     'windows',(SELECT jsonb_object_agg(w.label,jsonb_build_object(
+       'volume',coalesce(ws.volume,0),'txns',coalesce(ws.txns,0),'traders',coalesce(ws.traders,0),
+       'buy_usd',coalesce(ws.buys,0),'sell_usd',coalesce(ws.sells,0),'buyers',coalesce(ws.buyers,0),
+       'buys',coalesce(ws.buy_count,0),'sells',coalesce(ws.sell_count,0),'heat',coalesce(ws.score,0),
+       'change',CASE WHEN b.price>0 THEN (c.price/b.price-1)*100 ELSE NULL END))
+       FROM periods w LEFT JOIN stats ws ON ws.label=w.label AND ws.coin=c.id
+       LEFT JOIN LATERAL(SELECT coalesce(
+         (SELECT price FROM trades WHERE coin=c.id AND ts<=now_s-w.seconds ORDER BY ts DESC,id DESC LIMIT 1),
+         (SELECT price FROM trades WHERE coin=c.id AND ts>now_s-w.seconds AND ts<=now_s ORDER BY ts,id LIMIT 1)) AS price) b ON true)) AS value
+ FROM candidates c LEFT JOIN stats s ON s.coin=c.id AND s.label='5m'
+)
+SELECT jsonb_build_object(
+ 'coins',coalesce((SELECT jsonb_agg(value ORDER BY created_at DESC,id) FROM rendered WHERE rn<=60 OR selected),'[]'),
+ 'screener',coalesce((SELECT jsonb_agg(value ORDER BY created_at DESC,id) FROM rendered WHERE rn<=60 OR is_hot),'[]'),
+ 'trending',coalesce((SELECT jsonb_agg(value ORDER BY score DESC,id) FROM (SELECT * FROM rendered WHERE is_hot AND score>0 ORDER BY score DESC,id LIMIT 10) top_coins),'[]'),
+ 'pulse_counts',jsonb_build_object('new',(SELECT count(*) FROM ranked WHERE stage='new'),
+   'stretch',(SELECT count(*) FROM ranked WHERE stage='stretch'),'migrated',(SELECT count(*) FROM ranked WHERE stage='migrated')),
+ 'total_coins',(SELECT count(*) FROM ranked),
+ 'market_totals',(SELECT jsonb_object_agg(w.label,jsonb_build_object('volume',coalesce(t.volume,0),'txns',coalesce(t.txns,0)))
+   FROM periods w LEFT JOIN(SELECT label,sum(volume) AS volume,sum(txns) AS txns FROM stats GROUP BY label) t ON t.label=w.label))
+$$;
+
+CREATE OR REPLACE FUNCTION norx_build_state(now_s bigint,policies jsonb)
+RETURNS jsonb LANGUAGE sql STABLE AS $$
+ SELECT norx_coin_data(now_s)||jsonb_build_object(
+ 'api_version',6,'simulation',jsonb_build_object('running',true,'status','live','last_tick_at',now_s,'age_seconds',0),
+ 'trades',norx_public_trades(),'large_trades',norx_public_trades(NULL,1000000000,10),'coin_trades','[]'::jsonb,
+ 'trending_window_seconds',300,'agents',coalesce((SELECT jsonb_agg(jsonb_build_object(
+   'id',a.id,'cash',a.cash,'name',p.name,'persona',p.persona,'starting_cash',g.amount,
+   'trades',coalesce(t.trades,0),'biggest_buy',coalesce(t.biggest_buy,0),'strategy',policies->p.persona->>1,
+   'personality',policies->p.persona->>0,'disciplined',(policies->p.persona->>9)::boolean,
+   'risk',(policies->p.persona->>2)::double precision,'patience',(policies->p.persona->>6)::double precision) ORDER BY a.id)
+   FROM accounts a JOIN agent_personas p ON p.account=a.id LEFT JOIN agent_grants g ON g.account=a.id
+   LEFT JOIN(SELECT account,count(*) AS trades,max(amount) FILTER(WHERE side='buy') AS biggest_buy FROM trades GROUP BY account) t ON t.account=a.id
+   WHERE a.kind='agent'),'[]'::jsonb),
+ 'condition',(SELECT value FROM meta WHERE key='condition'),'simulated',true,
+ 'next_launch_at',(SELECT value::bigint FROM meta WHERE key='next_launch_at'),'server_time',now_s,'launch_batch',5)
+$$;
+
+CREATE OR REPLACE FUNCTION norx_refresh(now_s bigint,visit boolean,scenario jsonb,policies jsonb)
+RETURNS boolean LANGUAGE plpgsql AS $$
+DECLARE control record; image jsonb;
+BEGIN
+ IF NOT pg_try_advisory_xact_lock(hashtext('norx-write-'||current_schema())) THEN RETURN false; END IF;
+ SELECT active_until,next_batch_at,snapshot IS NOT NULL AS has_snapshot INTO STRICT control FROM cloud_runtime WHERE id=1;
+ IF visit THEN
+   IF control.active_until<now_s+60 THEN UPDATE cloud_runtime SET active_until=now_s+120 WHERE id=1; END IF;
+   IF control.active_until<now_s AND control.has_snapshot THEN UPDATE meta SET value=(now_s+60)::text WHERE key='next_launch_at'; END IF;
+ ELSIF control.active_until<now_s THEN RETURN false;
+ END IF;
+ IF control.next_batch_at>now_s AND control.has_snapshot THEN RETURN true; END IF;
+ IF (SELECT value FROM meta WHERE key='simulation_engine') IS DISTINCT FROM 'cloudflare' THEN
+   RAISE EXCEPTION 'Activate the Cloudflare simulation using cloudflare/prepare.py --activate' USING ERRCODE='P0001';
+ END IF;
+ PERFORM norx_batch(now_s,scenario,policies);
+ image:=norx_build_state(now_s,policies);
+ UPDATE cloud_runtime SET snapshot=image,snapshot_at=now_s,next_batch_at=now_s+10 WHERE id=1;
+ RETURN true;
+END $$;
+
+CREATE OR REPLACE FUNCTION norx_snapshot(now_s bigint,selected_token text DEFAULT NULL,include_agents boolean DEFAULT false)
+RETURNS TABLE(body text,snapshot_at bigint,next_batch_at bigint,active_until bigint)
+LANGUAGE plpgsql STABLE AS $$
+DECLARE r record; image jsonb; age bigint; extra jsonb; total_agents integer;
+BEGIN
+ SELECT * INTO STRICT r FROM cloud_runtime WHERE id=1;
+ snapshot_at:=r.snapshot_at;next_batch_at:=r.next_batch_at;active_until:=r.active_until;
+ IF r.snapshot IS NULL THEN body:=NULL;RETURN NEXT;RETURN; END IF;
+ image:=r.snapshot;age:=greatest(0,now_s-r.snapshot_at);
+ total_agents:=jsonb_array_length(image->'agents');
+ IF NOT include_agents THEN image:=image||jsonb_build_object('agents','[]'::jsonb); END IF;
+ image:=image||jsonb_build_object('agent_count',total_agents,'simulation',jsonb_build_object(
+   'running',age<=90,'status',CASE WHEN age<=20 THEN 'live' WHEN age<=90 THEN 'delayed' ELSE 'paused' END,
+   'last_tick_at',r.snapshot_at,'age_seconds',age),'server_time',now_s);
+ IF selected_token IS NOT NULL AND selected_token!='' THEN
+   IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(image->'coins') c WHERE c->>'id'=selected_token) THEN
+     extra:=norx_coin_data(now_s,selected_token)->'coins'->0;
+     IF extra IS NOT NULL THEN image:=jsonb_set(image,'{coins}',(image->'coins')||jsonb_build_array(extra||jsonb_build_object('in_feed',false))); END IF;
+   END IF;
+   image:=image||jsonb_build_object('coin_trades',norx_public_trades(selected_token,0,50));
+ END IF;
+ body:=image::text;RETURN NEXT;
+END $$;
+
+REVOKE ALL ON FUNCTION norx_policy_label(text),norx_public_trades(text,bigint,integer),
+ norx_coin_data(bigint,text),norx_build_state(bigint,jsonb),norx_refresh(bigint,boolean,jsonb,jsonb),norx_snapshot(bigint,text,boolean) FROM PUBLIC;

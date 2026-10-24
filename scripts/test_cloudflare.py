@@ -114,6 +114,7 @@ def run():
                     "node",
                     "--test",
                     "cloudflare/test/auth.test.js",
+                    "cloudflare/test/diagnostics.test.js",
                     "cloudflare/test/runtime.test.js",
                 ],
                 check=False,
