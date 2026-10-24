@@ -41,7 +41,9 @@ class SimulationRunner:
                         try:
                             market.tick()
                         except Exception:
-                            logging.exception("Tick rolled back; retrying next tick")
+                            logging.exception(
+                                "Simulation step rolled back; retrying next tick"
+                            )
                         self.stopped.wait(self.interval)
             except Timeout:
                 # Another API instance or standalone worker is already advancing

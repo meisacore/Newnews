@@ -353,40 +353,52 @@ class Market:
                 raise
 
     def account(self, identity):
+        # Existing portfolios are pure snapshot reads. A simulation writer must
+        # never make a balance refresh wait for the world advisory write lock.
+        with self.connection() as db:
+            if isinstance(self.path, PostgresTarget):
+                db.raw.execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
+            else:
+                db.execute("BEGIN")
+            a = db.execute(
+                "SELECT cash FROM accounts WHERE id=?", (identity,)
+            ).fetchone()
+            if a is not None:
+                holdings = {
+                    r["coin"]: r["qty"]
+                    for r in db.execute(
+                        "SELECT coin,qty FROM holdings WHERE account=?", (identity,)
+                    )
+                }
+                recent = [
+                    dict(r)
+                    for r in db.execute(
+                        "SELECT * FROM trades WHERE account=? ORDER BY id DESC LIMIT 50",
+                        (identity,),
+                    )
+                ]
+                return {
+                    "id": identity,
+                    "cash": a["cash"] / UNIT,
+                    "holdings": holdings,
+                    "trades": recent,
+                    "positions": [
+                        dict(r)
+                        for r in db.execute(
+                            "SELECT c.id,c.name,c.symbol,h.qty,CAST(c.cash AS DOUBLE PRECISION)/c.tokens/? AS price FROM holdings h JOIN coins c ON c.id=h.coin WHERE h.account=? AND h.qty>0 ORDER BY c.symbol",
+                            (UNIT, identity),
+                        )
+                    ],
+                }
+
+        # Only first registration writes; the world lock and primary key keep
+        # concurrent first logins from issuing more than one starting grant.
         with self.transaction() as db:
             db.execute(
                 "INSERT OR IGNORE INTO accounts(id,cash,kind) VALUES(?,?,?)",
                 (identity, START, "human"),
             )
-            a = db.execute(
-                "SELECT cash FROM accounts WHERE id=?", (identity,)
-            ).fetchone()
-            holdings = {
-                r["coin"]: r["qty"]
-                for r in db.execute(
-                    "SELECT coin,qty FROM holdings WHERE account=?", (identity,)
-                )
-            }
-            recent = [
-                dict(r)
-                for r in db.execute(
-                    "SELECT * FROM trades WHERE account=? ORDER BY id DESC LIMIT 50",
-                    (identity,),
-                )
-            ]
-            return {
-                "id": identity,
-                "cash": a["cash"] / UNIT,
-                "holdings": holdings,
-                "trades": recent,
-                "positions": [
-                    dict(r)
-                    for r in db.execute(
-                        "SELECT c.id,c.name,c.symbol,h.qty,CAST(c.cash AS DOUBLE PRECISION)/c.tokens/? AS price FROM holdings h JOIN coins c ON c.id=h.coin WHERE h.account=? AND h.qty>0 ORDER BY c.symbol",
-                        (UNIT, identity),
-                    )
-                ],
-            }
+        return self.account(identity)
 
     @staticmethod
     def amount(c, side, qty):
@@ -574,13 +586,23 @@ class Market:
                 "SELECT a.*,p.persona,p.name,p.next_tick FROM accounts a JOIN agent_personas p ON p.account=a.id WHERE a.kind='agent' AND p.next_tick<=?",
                 (tick,),
             ).fetchall()
+            remote = isinstance(self.path, PostgresTarget)
+            if remote:
+                # Release bookkeeping before evaluating traders. On a remote
+                # database, a whole cohort can otherwise hold this lock for minutes.
+                db.commit()
+            deadline = time.monotonic() + 4
             for a in rng.sample(eligible, min(DECISIONS_PER_TICK, len(eligible))):
+                if remote and time.monotonic() >= deadline:
+                    break
                 policy = PERSONALITIES[a["persona"]]
                 if (
                     rng.random() > min(1, policy.activation * scenario["activity"])
                     or not markets
                 ):
                     continue
+                if remote:
+                    db.execute("BEGIN IMMEDIATE")
                 choices = list(markets)
                 if rng.random() < 0.7:
                     owned = [
@@ -602,6 +624,11 @@ class Market:
                         "UPDATE agent_personas SET next_tick=? WHERE account=?",
                         (tick + rng.randint(*policy.cooldown), a["id"]),
                     )
+                if remote:
+                    self._heartbeat(db)
+                    db.commit()
+            if remote:
+                db.execute("BEGIN IMMEDIATE")
             for old in markets.values():
                 latest = db.execute(
                     "SELECT * FROM coins WHERE id=?", (old["id"],)
@@ -618,12 +645,16 @@ class Market:
                 (int(time.time()) - 3600,),
             )
 
-            # Timestamp the successful completion, not the beginning of a possibly
-            # expensive tick. Failures still roll back and leave the old heartbeat.
-            db.execute(
-                "INSERT INTO meta VALUES('last_tick_at', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                (str(int(time.time())),),
-            )
+            self._heartbeat(db)
+
+    @staticmethod
+    def _heartbeat(db):
+        # Only committed bookkeeping / decisions refresh liveness. Each completed
+        # remote agent step survives a later failure; the failed step rolls back.
+        db.execute(
+            "INSERT INTO meta VALUES('last_tick_at', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (str(int(time.time())),),
+        )
 
     def _agent_decision(self, db, agent, coin, rng):
         policy = PERSONALITIES[agent["persona"]]

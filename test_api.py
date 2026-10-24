@@ -144,6 +144,24 @@ class ApiTests(unittest.TestCase):
             )
             keys.assert_not_called()
 
+    def test_database_contention_returns_retryable_json_not_offline_error(self):
+        import psycopg
+        from psycopg_pool import PoolTimeout
+
+        for error in (
+            psycopg.errors.LockNotAvailable("lock timeout"),
+            psycopg.errors.QueryCanceled("statement timeout"),
+            PoolTimeout("busy"),
+        ):
+            with (
+                self.subTest(error=type(error).__name__),
+                patch.object(self.server.market, "account", side_effect=error),
+            ):
+                response = self.client.get("/api/me", headers=self.token())
+                self.assertEqual(response.status_code, 503)
+                self.assertEqual(response.headers["Retry-After"], "2")
+                self.assertIn("market is busy", response.json()["detail"])
+
     def test_backend_starts_simulation_and_launches_without_standalone_worker(self):
         with self.server.market.transaction() as db:
             db.execute("UPDATE meta SET value='0' WHERE key='next_launch_at'")

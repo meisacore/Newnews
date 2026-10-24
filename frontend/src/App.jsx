@@ -33,7 +33,9 @@ async function api(path, token, body, signal) {
     data = await r.json();
   } catch {
     throw Error(
-      "Cannot reach the market API. Start the updated backend on port 8000.",
+      r.status >= 500
+        ? `The market server returned an error (${r.status}). Please retry shortly.`
+        : "The market API returned an unexpected response. Check the backend terminal.",
     );
   }
   if (!r.ok)
@@ -188,6 +190,7 @@ function WorldApp({ auth, world, onWorld }) {
     [quote, setQuote] = useState(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
+    [accountError, setAccountError] = useState(""),
     [notice, setNotice] = useState(""),
     [refresh, setRefresh] = useState(0);
   const session = useRef(0);
@@ -268,21 +271,30 @@ function WorldApp({ auth, world, onWorld }) {
   }
   useEffect(() => {
     const version = ++session.current;
+    let stopped = false,
+      timer;
     setMe(null);
     setQuote(null);
+    setAccountError("");
     if (!auth.authenticated) return;
     const updateMe = async () => {
       try {
         const token = await auth.getToken();
         const account = await api("me", token);
-        if (session.current === version) setMe(account);
+        if (!stopped && session.current === version) {
+          setMe(account);
+          setAccountError("");
+        }
       } catch (e) {
-        if (session.current === version) setError(e.message);
+        if (!stopped && session.current === version) setAccountError(e.message);
       }
+      if (!stopped) timer = setTimeout(updateMe, 10000);
     };
     updateMe();
-    const timer = setInterval(updateMe, 10000);
-    return () => clearInterval(timer);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
   }, [auth.authenticated]);
   useEffect(() => {
     setQuote(null);
@@ -404,6 +416,11 @@ function WorldApp({ auth, world, onWorld }) {
       {feedError && (
         <div role="alert" className="error banner">
           Market feed unavailable: {feedError}
+        </div>
+      )}
+      {accountError && (
+        <div role="alert" className="error banner">
+          Portfolio update: {accountError}
         </div>
       )}
       {error && (

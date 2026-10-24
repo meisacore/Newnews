@@ -8,6 +8,8 @@ from scenarios import SCENARIOS
 from contextlib import asynccontextmanager
 from pathlib import Path
 import jwt
+import psycopg
+from psycopg_pool import PoolTimeout
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, StrictInt
@@ -91,6 +93,19 @@ async def invalid(request, exc):
     from fastapi.responses import JSONResponse
 
     return JSONResponse({"detail": str(exc)}, status_code=400)
+
+
+@app.exception_handler(psycopg.errors.LockNotAvailable)
+@app.exception_handler(psycopg.errors.QueryCanceled)
+@app.exception_handler(PoolTimeout)
+async def database_busy(request, exc):
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(
+        {"detail": "The market is busy finishing an update. Please retry shortly."},
+        status_code=503,
+        headers={"Retry-After": "2"},
+    )
 
 
 @lru_cache(maxsize=8)

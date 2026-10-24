@@ -120,6 +120,17 @@ world uses a dedicated worker-lock connection plus up to four pooled connections
 per backend process. Run one backend process initially and place the backend near
 the database region to keep simulation/database round trips short.
 
+Existing portfolio refreshes use read-only, repeatable snapshots and do not acquire
+the simulation write lock. Only a first login needs a serialized starting grant.
+PostgreSQL simulation bookkeeping, each agent decision and final momentum updates
+commit separately, so a whole cohort cannot monopolize the write lock. Trader
+evaluation has a soft four-second budget checked between decisions; every trade
+still updates cash, holdings, pool reserves and history atomically. Completed
+steps survive a later failed step. SQLite keeps whole-tick transactions. Slow
+remote connections can process fewer decisions per cohort; put the backend near
+the database region for sustained activity. Database-busy responses use retryable
+503 JSON rather than being presented as an offline API.
+
 Keep the SQLite backup until you have verified the PostgreSQL portfolios. Removing
 `DATABASE_URL` switches back to SQLite but does **not** copy PostgreSQL changes
 back; the two stores are independent after cutover.

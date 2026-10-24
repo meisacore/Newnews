@@ -8,6 +8,7 @@ import tempfile
 import unittest
 import uuid
 import random
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
@@ -263,6 +264,68 @@ class PostgresTests(unittest.TestCase):
             state = reopened.state("frog")
         self.assertEqual(state["total_coins"], 153)
         self.assertLess(len(queries), 30)
+
+    def test_existing_portfolio_reads_do_not_wait_for_world_write_lock(self):
+        market = Market(self.target)
+        before = market.account("did:privy:reader")
+        with market.transaction():
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                result = executor.submit(market.account, "did:privy:reader").result(
+                    timeout=2
+                )
+        self.assertEqual(before, result)
+
+    def test_player_trade_can_interleave_between_worker_decisions(self):
+        from storage import PostgresConnection
+
+        market = Market(self.target)
+        market.account("did:privy:player")
+        before = self.totals(market)
+        committed, release = threading.Event(), threading.Event()
+        errors = []
+        commits = 0
+        original = PostgresConnection.commit
+
+        def checkpoint(db):
+            nonlocal commits
+            original(db)
+            if threading.current_thread().name == "norx-test-cohort":
+                commits += 1
+                if commits == 2:
+                    committed.set()
+                    if not release.wait(10):
+                        raise RuntimeError("test did not release worker")
+
+        def advance():
+            try:
+                market.tick(seed=0, now=1000)
+            except Exception as exc:
+                errors.append(exc)
+
+        with patch.object(PostgresConnection, "commit", checkpoint):
+            thread = threading.Thread(target=advance, name="norx-test-cohort")
+            thread.start()
+            try:
+                self.assertTrue(
+                    committed.wait(5), "worker must commit before finishing the cohort"
+                )
+                with ThreadPoolExecutor(max_workers=1) as executor:
+
+                    def player_trade():
+                        q = market.quote("did:privy:player", "frog", "buy", 50 * UNIT)
+                        return market.execute(
+                            "did:privy:player", q["id"], "interleaved-player"
+                        )
+
+                    result = executor.submit(player_trade).result(timeout=2)
+                self.assertEqual(result["side"], "buy")
+            finally:
+                release.set()
+                thread.join(10)
+        self.assertFalse(thread.is_alive())
+        self.assertFalse(errors, errors)
+        self.assertEqual(before, self.totals(market))
+        self.assertTrue(market.state()["simulation"]["running"])
 
     def test_api_uses_postgres_and_private_rls_tables(self):
         from fastapi.testclient import TestClient
