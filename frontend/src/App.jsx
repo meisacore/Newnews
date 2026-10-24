@@ -182,6 +182,7 @@ function WorldApp({ auth, world, onWorld }) {
     [accountError, setAccountError] = useState(""),
     [notice, setNotice] = useState(""),
     [refresh, setRefresh] = useState(0);
+  const accountPoller = useRef(null);
   const session = useRef(0);
   const feedRequest = useRef(0);
   const selection = route.view === "coin" ? selected : "";
@@ -277,18 +278,37 @@ function WorldApp({ auth, world, onWorld }) {
     setQuote(null);
     setAccountError("");
     if (!auth.authenticated) return;
-    const polling = visiblePolling(async () => {
-      try {
-        const token = await auth.getToken();
-        const account = await worldApi("me", token);
-        if (!stopped && session.current === version) {
-          setMe(account);
-          setAccountError("");
+    let failures = 0,
+      retryDelay = 60000;
+    const polling = visiblePolling(
+      async () => {
+        try {
+          const token = await auth.getToken();
+          const account = await worldApi("me", token);
+          failures = 0;
+          retryDelay = 60000;
+          if (!stopped && session.current === version) {
+            setMe(account);
+            setAccountError("");
+          }
+        } catch (e) {
+          failures++;
+          const temporary = !e.status || e.status === 429 || e.status >= 500;
+          retryDelay =
+            temporary && failures <= 5
+              ? Math.max(
+                  Math.min(30000, 2000 * 2 ** (failures - 1)),
+                  e.retryAfterMs || 0,
+                )
+              : 60000;
+          if (!stopped && session.current === version)
+            setAccountError(e.message);
         }
-      } catch (e) {
-        if (!stopped && session.current === version) setAccountError(e.message);
-      }
-    }, 60000);
+      },
+      60000,
+      { nextDelay: () => retryDelay },
+    );
+    accountPoller.current = polling;
     const changed = (event) => {
       if (event.detail.world === world) void polling.refresh();
     };
@@ -297,6 +317,7 @@ function WorldApp({ auth, world, onWorld }) {
       stopped = true;
       polling.stop();
       window.removeEventListener("norx:portfolio-refresh", changed);
+      if (accountPoller.current === polling) accountPoller.current = null;
     };
   }, [auth.authenticated]);
   useEffect(() => {
@@ -425,7 +446,10 @@ function WorldApp({ auth, world, onWorld }) {
       )}
       {accountError && (
         <div role="alert" className="error banner">
-          Portfolio update: {accountError}
+          Portfolio update: {accountError}{" "}
+          <button onClick={() => accountPoller.current?.refresh()}>
+            Retry portfolio
+          </button>
         </div>
       )}
       {error && (

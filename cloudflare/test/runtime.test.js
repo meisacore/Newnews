@@ -206,6 +206,59 @@ test(
 );
 
 test(
+  "first sign-in and concurrent grants do not wait on the world writer lock",
+  { skip: !url },
+  async () => {
+    let acquired, release;
+    const ready = new Promise((resolve) => {
+      acquired = resolve;
+    });
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const holder = withDatabase(
+      env,
+      "balanced",
+      async (db) => {
+        acquired();
+        await gate;
+      },
+      { write: true },
+    );
+    await ready;
+    const user = "did:privy:registration-during-batch";
+    try {
+      const accounts = await Promise.all(
+        Array.from({ length: 6 }, async () => {
+          const response = await api(request("me"), env, ctx, {
+            verify: async () => user,
+            edgeCache: null,
+          });
+          assert.equal(response.status, 200);
+          return response.json();
+        }),
+      );
+      for (const a of accounts) {
+        assert.equal(a.cash, 10000);
+        assert.deepEqual(a.holdings, {});
+      }
+      const grant = await withDatabase(env, "balanced", (db) =>
+        one(
+          db,
+          "SELECT count(*) AS accounts,sum(cash) AS cash FROM accounts WHERE id=$1",
+          [user],
+        ),
+      );
+      assert.equal(Number(grant.accounts), 1);
+      assert.equal(Number(grant.cash), 10000000000);
+    } finally {
+      release();
+      await holder;
+    }
+  },
+);
+
+test(
   "PostgreSQL snapshots preserve all public metrics at production-sized history",
   { skip: !url },
   async () => {

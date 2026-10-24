@@ -8,6 +8,8 @@ $norxFiles = @(
     "frontend/public/favicon.svg",
     "frontend/src/routing.js",
     "frontend/src/App.jsx",
+    "frontend/src/requestJson.js",
+    "frontend/src/visiblePolling.js",
     "frontend/src/main.jsx",
     "frontend/src/ExchangeChrome.jsx",
     "frontend/src/Terminal.jsx",

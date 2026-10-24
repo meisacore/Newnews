@@ -163,26 +163,30 @@ export async function api(
     if (value === null) throw new ApiError(400, "Unknown coin");
   } else if (path === "/api/me" && request.method === "GET") {
     const user = await verify(request, env);
-    value = await withDatabase(env, world, async (db) => {
-      // Snapshot reads never wait for a simulation writer's advisory lock.
-      await db.query(
-        "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
-      );
-      return account(db, user);
-    });
-    if (!value)
-      value = await withDatabase(
-        env,
-        world,
-        async (db) => {
-          await db.query(
-            "INSERT INTO accounts(id,cash,kind) VALUES($1,10000000000,'human') ON CONFLICT DO NOTHING",
-            [user],
-          );
-          return commit(db, await account(db, user));
-        },
-        { write: true },
-      );
+    const read = () =>
+      withDatabase(env, world, async (db) => {
+        db.norxStage = "portfolio_read";
+        await db.query(
+          "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+        );
+        return account(db, user);
+      });
+    value = await read();
+    if (!value) {
+      await withDatabase(env, world, async (db) => {
+        db.norxStage = "portfolio_register";
+        // The primary key serializes concurrent registration for THIS identity.
+        // No world advisory lock: agent batches must not block a new sign-in.
+        await db.query(
+          "INSERT INTO accounts(id,cash,kind) VALUES($1,10000000000,'human') ON CONFLICT DO NOTHING",
+          [user],
+        );
+        return commit(db, true);
+      });
+      // After registration, use a fresh consistent read, including if another
+      // concurrent request created this account first and then placed a trade.
+      value = await read();
+    }
   } else if (
     ["/api/quote", "/api/trade"].includes(path) &&
     request.method === "POST"
@@ -275,10 +279,12 @@ export function errorResponse(error) {
     ["55P03", "57014", "53300", "57P01", "ECONNRESET", "ETIMEDOUT"].includes(
       error.code,
     )
-  )
+  ) {
+    logFailure("NORX API failed", error);
     return json({ detail: "The market is busy. Please retry shortly." }, 503, {
       "Retry-After": "2",
     });
+  }
   logFailure("NORX API failed", error);
   return json({ detail: databaseFailure(error).hint }, 503, {
     "Retry-After": "2",

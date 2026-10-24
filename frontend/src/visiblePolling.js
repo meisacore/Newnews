@@ -6,6 +6,7 @@ export function visiblePolling(
     document: doc = document,
     setTimer = setTimeout,
     clearTimer = clearTimeout,
+    nextDelay = () => interval,
   } = {},
 ) {
   let stopped = false,
@@ -32,7 +33,13 @@ export function visiblePolling(
         if (queued) {
           queued = false;
           void refresh();
-        } else timer = setTimer(() => void refresh(), interval);
+        } else {
+          const delay = nextDelay();
+          timer = setTimer(
+            () => void refresh(),
+            Number.isFinite(delay) && delay > 0 ? delay : interval,
+          );
+        }
       }
     }
   }

@@ -236,3 +236,20 @@ stay in place. This change needs no database preparation or migration. Reload wi
 Ctrl+Shift+R after publishing; an old cached favicon can take another tab opening
 to refresh. Plain file hosting must provide the same market-page fallback; Vite,
 the Python server, and the Worker already include it.
+
+## Temporary portfolio errors after sign-in
+
+Privy authentication and the private portfolio request are separate. A signed-in
+user can briefly see a portfolio error if a database call fails. First-time
+registration now uses the account primary key to issue its grant once, without
+waiting on the simulation's world lock. Existing account reads use a consistent,
+read-only snapshot.
+
+Temporary portfolio failures retry after 2, 4, 8, 16 and 30 seconds (or the server's
+longer Retry-After delay), then return to the normal 60-second schedule. A success
+resets that schedule immediately and clears the error. Hidden tabs pause retries.
+The Retry portfolio button requests an immediate refresh without signing out.
+Quotes and executions are not automatically retried by this mechanism. This fix
+requires only updated frontend/Worker files and a rebuild/deploy, not database
+preparation or another data import. Busy API errors now log their safe category
+and operation stage for diagnosing persistent failures.
