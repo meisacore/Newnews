@@ -1,3 +1,4 @@
+import { databaseFailure, logFailure } from "./diagnostics.js";
 import { ApiError, SCENARIOS, worldSchema } from "./config.js";
 import { withDatabase, one, commit } from "./database.js";
 import { account, candles, coinData, recentTrades } from "./state.js";
@@ -39,9 +40,7 @@ export function validateBody(path, b) {
 }
 function background(ctx, operation) {
   ctx.waitUntil(
-    operation.catch((error) =>
-      console.error("NORX market refresh failed", error.code || error.name),
-    ),
+    operation.catch((error) => logFailure("NORX market refresh failed", error)),
   );
 }
 // Only public snapshots/charts use the edge cache, and only after authentication
@@ -276,12 +275,10 @@ export function errorResponse(error) {
     return json({ detail: "The market is busy. Please retry shortly." }, 503, {
       "Retry-After": "2",
     });
-  console.error("NORX API failed", error.code || error.name);
-  return json(
-    { detail: "The market service is unavailable. Please retry shortly." },
-    503,
-    { "Retry-After": "2" },
-  );
+  logFailure("NORX API failed", error);
+  return json({ detail: databaseFailure(error).hint }, 503, {
+    "Retry-After": "2",
+  });
 }
 export default {
   async fetch(request, env, ctx) {

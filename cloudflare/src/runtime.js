@@ -1,6 +1,7 @@
 import { POLICIES, SCENARIOS, ApiError } from "./config.js";
 import { withDatabase, one, commit } from "./database.js";
 import { buildState } from "./state.js";
+import { logFailure } from "./diagnostics.js";
 
 // At most one batch per ten seconds per active world, regardless of user count.
 // Cron visits active worlds each minute. No catch-up launch flood after inactivity.
@@ -16,6 +17,7 @@ export async function advance(
       ["norx-write-" + schema],
     );
     if (!lock.acquired) return null;
+    db.norxStage = "runtime_read";
     const control = await one(db, "SELECT * FROM cloud_runtime WHERE id=1");
     if (!control)
       throw new ApiError(503, "Cloudflare database setup is incomplete");
@@ -43,11 +45,13 @@ export async function advance(
         503,
         "Activate the Cloudflare simulation using cloudflare/prepare.py --activate",
       );
+    db.norxStage = "simulation_batch";
     await db.query("SELECT norx_batch($1,$2::jsonb,$3::jsonb)", [
       now,
       JSON.stringify(SCENARIOS[world]),
       JSON.stringify(POLICIES),
     ]);
+    db.norxStage = "snapshot_build";
     const snapshot = await buildState(db, now);
     await db.query(
       "UPDATE cloud_runtime SET snapshot=$1::jsonb,snapshot_at=$2,next_batch_at=$3 WHERE id=1",
@@ -71,11 +75,7 @@ export async function scheduled(env) {
     try {
       await advance(env, world);
     } catch (error) {
-      console.error(
-        "NORX scheduled batch failed",
-        world,
-        error.code || error.name,
-      );
+      logFailure("NORX scheduled batch failed", error, world);
     }
   }
 }

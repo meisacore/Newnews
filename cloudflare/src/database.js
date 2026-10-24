@@ -42,16 +42,24 @@ export async function withDatabase(
   });
   client.on("error", () => {});
   try {
+    client.norxStage = "connect";
     await client.connect();
+    client.norxStage = "transaction_begin";
     await client.query("BEGIN");
+    client.norxStage = "session_config";
     await client.query(`SET LOCAL search_path TO "${schema}"`);
     await client.query("SET LOCAL statement_timeout='15s'");
     await client.query("SET LOCAL lock_timeout='1500ms'");
+    client.norxStage = "write_lock";
     if (write)
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
         "norx-write-" + schema,
       ]);
+    client.norxStage = "market_query";
     return await operation(client, schema);
+  } catch (error) {
+    if (error && typeof error === "object") error.norxStage = client.norxStage;
+    throw error;
   } finally {
     // operation commits explicitly, otherwise roll back every incomplete transaction.
     try {
