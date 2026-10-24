@@ -22,7 +22,7 @@ export function validateMarketState(data) {
     )
   ) {
     throw new Error(
-      "The backend is out of date. Stop it with Ctrl+C, update the project files, and restart the backend.",
+      "The market backend is out of date. Update NORX and reload this page.",
     );
   }
   return data;

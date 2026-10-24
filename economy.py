@@ -7,10 +7,11 @@ import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from storage import PostgresTarget, connection
-from scenarios import SCENARIOS
+
 from health import simulation_status
 from personalities import PERSONALITIES, WEALTHY_ENTRANTS, intention
+from scenarios import SCENARIOS
+from storage import PostgresTarget, connection
 
 UNIT = 1_000_000  # integer millionths of a dollar
 START = 10_000 * UNIT
@@ -539,6 +540,11 @@ class Market:
         rng = random.Random(seed)
         now = int(time.time()) if now is None else int(now)
         with self.transaction() as db:
+            engine = db.execute(
+                "SELECT value FROM meta WHERE key='simulation_engine'"
+            ).fetchone()
+            if engine and engine[0] == "cloudflare":
+                return  # Cutover guard: an accidentally restarted Python worker stays idle.
             self._launch_due(db, rng, now)
             tick = (
                 int(db.execute("SELECT value FROM meta WHERE key='tick'").fetchone()[0])

@@ -91,7 +91,7 @@ export default function Pulse({ state, feedError, busy, onOpen, onBuy }) {
             : !state
               ? "Connecting to the market…"
               : health.status === "paused"
-                ? "Simulation paused · restart the backend to resume"
+                ? "Simulation resuming · waiting for market activity"
                 : health.status === "delayed"
                   ? "Updating market activity…"
                   : remaining

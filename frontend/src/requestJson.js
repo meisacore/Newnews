@@ -16,7 +16,7 @@ export async function requestJson(path, world, { token, body, signal } = {}) {
     throw Error(
       response.status >= 500
         ? `The market server returned an error (${response.status}). Please retry shortly.`
-        : "The market API returned an unexpected response. Check the backend terminal.",
+        : "The market API returned an unexpected response. Please retry shortly.",
     );
   }
   if (!response.ok)

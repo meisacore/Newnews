@@ -544,3 +544,12 @@ empty `VITE_PRIVY_APP_ID=` override, run
 `.venv/bin/python scripts/smoke_polling.py` for a temporary, isolated two-tab browser
 check of HTTP counts, hidden polling, private reads, world isolation and a real
 simulated buy. Restore your normal Privy build afterward.
+
+## Cloudflare deployment (no separate Python host)
+
+The Cloudflare version hosts the frontend and API together with Workers Static
+Assets, keeps the existing Supabase ledger, and runs short agent batches only
+while worlds are active. Privy login is email-only. See
+[Cloudflare setup](docs/cloudflare-setup.md) for Windows installation, safe cutover,
+secrets, deployment, limits and rollback. Use Workers rather than a Pages build for
+this version; the Python local development path remains available.

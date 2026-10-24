@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "norx",
+  "main": "src/index.js",
+  "compatibility_date": "2026-03-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "../frontend/dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/"],
+    "html_handling": "none",
+  },
+  "triggers": { "crons": ["* * * * *"] },
+  "vars": {
+    "PRIVY_APP_ID": "cmvjqf2i1030e0hl9wck83jj1",
+    "NORX_PG_SCHEMA_PREFIX": "norx_",
+  },
+  "observability": { "enabled": true, "head_sampling_rate": 0.1 },
+}

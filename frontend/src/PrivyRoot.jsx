@@ -20,7 +20,7 @@ export default function PrivyRoot({ id }) {
     <PrivyProvider
       appId={id}
       config={{
-        loginMethods: ["email", "google"],
+        loginMethods: ["email"],
         embeddedWallets: {
           ethereum: { createOnLogin: "off" },
           solana: { createOnLogin: "off" },
