@@ -15,36 +15,18 @@ import { TokenHeader, TokenInfo } from "./TokenWorkspace";
 import { Discover, Activity } from "./Terminal";
 import { ExchangeHeader, ExchangeFooter, Portfolio } from "./ExchangeChrome";
 import "./terminal.css";
+import { requestJson } from "./requestJson";
+import { publicMarketRequest, invalidatePublicMarket } from "./marketRequests";
+import { isPublicMarketPath } from "./publicCache";
+import { visiblePolling } from "./visiblePolling";
 import { validateMarketState } from "./marketState";
 
-async function api(path, token, body, signal) {
-  const r = await fetch("/api/" + path, {
-    cache: "no-store",
-    signal,
-    headers: {
-      "X-Norx-World": readWorld(),
-      ...(token ? { Authorization: "Bearer " + token } : {}),
-      ...(body ? { "Content-Type": "application/json" } : {}),
-    },
-    ...(body ? { method: "POST", body: JSON.stringify(body) } : {}),
-  });
-  let data;
-  try {
-    data = await r.json();
-  } catch {
-    throw Error(
-      r.status >= 500
-        ? `The market server returned an error (${r.status}). Please retry shortly.`
-        : "The market API returned an unexpected response. Check the backend terminal.",
-    );
-  }
-  if (!r.ok)
-    throw Error(
-      typeof data.detail === "string" ? data.detail : "Request failed",
-    );
-  return data;
+async function api(path, token, body, signal, world = readWorld()) {
+  if (!token && !body && isPublicMarketPath(path))
+    return publicMarketRequest(path, world);
+  return requestJson(path, world, { token, body, signal });
 }
-function Chart({ coin, interval, refresh, range }) {
+function Chart({ coin, interval, refresh, range, world }) {
   const money = useCurrency();
   const el = useRef();
   const chart = useRef();
@@ -86,8 +68,15 @@ function Chart({ coin, interval, refresh, range }) {
     fitted.current = false;
   }, [coin, interval, range]);
   useEffect(() => {
+    if (document.hidden) return;
     let cancelled = false;
-    api(`candles/${coin}?interval=${interval}&range_seconds=${range}`)
+    api(
+      `candles/${coin}?interval=${interval}&range_seconds=${range}`,
+      undefined,
+      undefined,
+      undefined,
+      world,
+    )
       .then((data) => {
         if (cancelled) return;
         setError("");
@@ -136,7 +125,7 @@ function Chart({ coin, interval, refresh, range }) {
     return () => {
       cancelled = true;
     };
-  }, [coin, interval, refresh, money.unit, range]);
+  }, [coin, interval, refresh, money.unit, range, world]);
   return (
     <>
       <div className="chart-canvas" ref={el} />
@@ -172,6 +161,8 @@ export function App({ auth }) {
   );
 }
 function WorldApp({ auth, world, onWorld }) {
+  const worldApi = (path, token, body, signal) =>
+    api(path, token, body, signal, world);
   const tray = useTradeTray();
   const money = useCurrency();
   const dollars = money.format;
@@ -180,7 +171,7 @@ function WorldApp({ auth, world, onWorld }) {
   const [route, setRoute] = useState(readRoute),
     [state, setState] = useState(null),
     [feedError, setFeedError] = useState(""),
-    [me, setMe] = useState(null),
+    [account, setMe] = useState(null),
     [selected, setSelected] = useState(() => readRoute().coin || ""),
     [interval, setIntervalValue] = useState(60),
     [range, setRange] = useState(7200),
@@ -195,15 +186,27 @@ function WorldApp({ auth, world, onWorld }) {
     [refresh, setRefresh] = useState(0);
   const session = useRef(0);
   const feedRequest = useRef(0);
-  const feedSelection = useRef(selected);
-  feedSelection.current = selected;
+  const selection = route.view === "coin" ? selected : "";
+  const feedSelection = useRef(selection);
+  feedSelection.current = selection;
+  const me = account
+    ? {
+        ...account,
+        positions: (account.positions || []).map((position) => {
+          const live =
+            state?.screener.find((coin) => coin.id === position.id) ||
+            state?.coins.find((coin) => coin.id === position.id);
+          return live ? { ...position, price: live.price } : position;
+        }),
+      }
+    : null;
   async function load(signal) {
-    if (selected !== feedSelection.current) return;
+    if (selection !== feedSelection.current) return;
     const request = ++feedRequest.current;
     try {
       const data = validateMarketState(
-        await api(
-          "state?selected=" + encodeURIComponent(selected),
+        await worldApi(
+          "state?selected=" + encodeURIComponent(selection),
           undefined,
           undefined,
           signal,
@@ -212,7 +215,7 @@ function WorldApp({ auth, world, onWorld }) {
       if (
         signal?.aborted ||
         request !== feedRequest.current ||
-        selected !== feedSelection.current
+        selection !== feedSelection.current
       )
         return;
       setFeedError("");
@@ -222,34 +225,26 @@ function WorldApp({ auth, world, onWorld }) {
       if (
         signal?.aborted ||
         request !== feedRequest.current ||
-        selected !== feedSelection.current
+        selection !== feedSelection.current
       )
         return;
       throw error;
     }
   }
   useEffect(() => {
-    let stopped = false,
-      timer,
-      controller;
-    async function poll() {
-      controller = new AbortController();
+    const controller = new AbortController();
+    const polling = visiblePolling(async () => {
       try {
         await load(controller.signal);
       } catch (error) {
-        if (!stopped) setFeedError(error.message);
+        if (!controller.signal.aborted) setFeedError(error.message);
       }
-      // Slow responses must finish before another poll starts. This prevents
-      // overlapping snapshots from moving the feed or heartbeat backwards.
-      if (!stopped) timer = setTimeout(poll, 3000);
-    }
-    poll();
+    }, 10000);
     return () => {
-      stopped = true;
-      clearTimeout(timer);
-      controller?.abort();
+      polling.stop();
+      controller.abort();
     };
-  }, [selected]);
+  }, [selection]);
   useEffect(() => {
     const update = () => {
       const next = readRoute();
@@ -271,16 +266,15 @@ function WorldApp({ auth, world, onWorld }) {
   }
   useEffect(() => {
     const version = ++session.current;
-    let stopped = false,
-      timer;
+    let stopped = false;
     setMe(null);
     setQuote(null);
     setAccountError("");
     if (!auth.authenticated) return;
-    const updateMe = async () => {
+    const polling = visiblePolling(async () => {
       try {
         const token = await auth.getToken();
-        const account = await api("me", token);
+        const account = await worldApi("me", token);
         if (!stopped && session.current === version) {
           setMe(account);
           setAccountError("");
@@ -288,12 +282,15 @@ function WorldApp({ auth, world, onWorld }) {
       } catch (e) {
         if (!stopped && session.current === version) setAccountError(e.message);
       }
-      if (!stopped) timer = setTimeout(updateMe, 10000);
+    }, 60000);
+    const changed = (event) => {
+      if (event.detail.world === world) void polling.refresh();
     };
-    updateMe();
+    window.addEventListener("norx:portfolio-refresh", changed);
     return () => {
       stopped = true;
-      clearTimeout(timer);
+      polling.stop();
+      window.removeEventListener("norx:portfolio-refresh", changed);
     };
   }, [auth.authenticated]);
   useEffect(() => {
@@ -334,7 +331,7 @@ function WorldApp({ auth, world, onWorld }) {
           throw Error("Enter a positive amount");
         if (side === "sell" && !Number.isInteger(n))
           throw Error("Sell quantity must be a whole number");
-        const data = await api("quote", token, {
+        const data = await worldApi("quote", token, {
           coin: selected,
           side,
           ...(side === "buy"
@@ -343,16 +340,17 @@ function WorldApp({ auth, world, onWorld }) {
         });
         if (version === session.current) setQuote(data);
       } else {
-        const result = await api("trade", token, {
+        const result = await worldApi("trade", token, {
           quote_id: quote.id,
           request_id: quote.id,
         });
+        await invalidatePublicMarket(world);
         setQuote(null);
         if (version === session.current) {
           setNotice(
             `${result.side === "buy" ? "Bought" : "Sold"} ${result.qty.toLocaleString()} ${result.qty === 1 ? "token" : "tokens"} for ${dollars(result.usd)}.`,
           );
-          const account = await api("me", token);
+          const account = await worldApi("me", token);
           if (version === session.current) setMe(account);
           await load();
         }
@@ -518,6 +516,7 @@ function WorldApp({ auth, world, onWorld }) {
                 interval={interval}
                 refresh={refresh}
                 range={range}
+                world={world}
               />
             </div>
             {tray.control}

@@ -30,6 +30,7 @@ with sync_playwright() as p:
     banner = page.get_by_role("alert").filter(has_text="Portfolio update:")
     expect(banner).to_contain_text("server returned an error (500)")
     assert "Start the updated backend" not in banner.inner_text()
+    page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
     expect(banner).to_have_count(0, timeout=20000)
     expect(page.locator(".exchange-header")).to_contain_text("$10,000.00")
     assert len(requests) >= 2

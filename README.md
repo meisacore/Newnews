@@ -499,3 +499,48 @@ On a token page, choose **Expand trades** to give the execution tape more space,
 or drag the gold divider between the chart and tape. The divider supports keyboard
 Up/Down and Home/End keys. **Restore chart** returns the chart; drag sizing is saved
 in this browser. Stars, original fonts and the gold theme remain in place.
+
+## Lower-traffic market updates
+
+Visible tabs refresh the public market feed every **10 seconds** after the previous
+response completes. Signed-in portfolios reconcile every **60 seconds**, on return
+to a visible tab, and immediately after a trade. Chart requests follow visible
+feed updates; changing range or interval also requests that chart. Hidden tabs
+stop recurring market/portfolio/chart polling. An already-started request can
+finish. Known holding prices follow public feed prices; holdings outside that feed
+are repriced on the portfolio check.
+
+Browsers supporting **SharedWorker** share public market requests and short-lived
+snapshots across tabs of the same app origin. Other browsers use a bounded cache
+inside each tab. Active tabs keep their own selected world even when another tab
+changes the saved default. Credentials, portfolios, quotes and executions are never
+sent to the shared worker or put in the public cache. Other visible tabs in the
+same world refresh their own private portfolio after a local tab makes a trade.
+A minute reconciliation also catches trades made from another device.
+
+The Python API coalesces concurrent public state/chart reads and caches their
+results for **2 seconds**, separately by world and selected token/chart parameters.
+Cache entries are bounded and invalidated after trade execution; quote/execution
+prices always come from the authoritative ledger. Private endpoints remain
+`no-store`. This server cache reduces database reads, not HTTP request counts.
+Caches are in-process, not shared across separate backend processes.
+
+For one continuously visible signed-in dashboard without a chart, the nominal
+polling estimate changes from 37,440 to **10,080 requests/day** (8,640 market +
+1,440 portfolio), about **73% fewer**. Initial loads, visibility changes, trading,
+chart views and Privy requests are extra. Response time reduces the actual periodic
+rate. Multiple supported tabs can share public requests, but private requests stay
+separate. Hidden tabs make no recurring application polls; Privy can still manage
+its own session traffic.
+
+This does not pause the simulation worker, remove agent database writes, configure
+cloud hosting, or guarantee zero-cost usage. A serverless simulation remains a
+separate deployment change. Update the full project (including new JS modules and
+`snapshots.py`), rebuild the frontend and restart the backend to use these changes.
+
+Verification: `node --test frontend/src/*.test.js` covers cache isolation, expiry,
+trade invalidation and visibility scheduling. After building with an explicitly
+empty `VITE_PRIVY_APP_ID=` override, run
+`.venv/bin/python scripts/smoke_polling.py` for a temporary, isolated two-tab browser
+check of HTTP counts, hidden polling, private reads, world isolation and a real
+simulated buy. Restore your normal Privy build afterward.

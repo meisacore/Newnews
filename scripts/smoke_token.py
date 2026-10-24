@@ -10,6 +10,8 @@ with sync_playwright() as p:
         args=["--no-sandbox"],
     )
     page = browser.new_page(viewport={"width": 1600, "height": 1000})
+    # Inspect chart responses on the page; multi-tab sharing has its own smoke test.
+    page.add_init_script("window.SharedWorker = undefined")
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.goto(base + "/market.html#coin/frog")

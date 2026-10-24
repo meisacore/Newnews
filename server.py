@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, StrictInt
 from economy import Market
 from paths import database_path, world_path
 from worker import SimulationRunner
+from snapshots import PublicSnapshots
 
 DEFAULT_APP_ID = json.loads((Path(__file__).parent / "app-config.json").read_text())[
     "privy_app_id"
@@ -31,6 +32,7 @@ worlds = {}
 runners = {}
 world_lock = threading.Lock()
 auto_running = False
+public_snapshots = PublicSnapshots()
 
 
 def current_market(x_norx_world: str = Header(default="balanced")):
@@ -168,7 +170,9 @@ def config():
 
 @app.get("/api/state")
 def state(selected: str | None = None, market=Depends(current_market)):
-    return market.state(selected)
+    return public_snapshots.get(
+        market, ("state", selected or None), lambda: market.state(selected)
+    )
 
 
 @app.get("/api/me")
@@ -187,7 +191,11 @@ def candles(
         raise HTTPException(400, "Unsupported candle interval")
     if range_seconds not in (7200, 86400):
         raise HTTPException(400, "Unsupported chart range")
-    return market.candles(coin, interval, limit=range_seconds // interval + 1)
+    return public_snapshots.get(
+        market,
+        ("candles", coin, interval, range_seconds),
+        lambda: market.candles(coin, interval, limit=range_seconds // interval + 1),
+    )
 
 
 class Quote(BaseModel):
@@ -210,7 +218,9 @@ def quote(body: Quote, user=Depends(identity), market=Depends(current_market)):
 
 @app.post("/api/trade")
 def trade(body: Execute, user=Depends(identity), market=Depends(current_market)):
-    return market.execute(user, body.quote_id, body.request_id)
+    result = market.execute(user, body.quote_id, body.request_id)
+    public_snapshots.invalidate(market)
+    return result
 
 
 DIST = Path(__file__).parent / "frontend" / "dist"

@@ -162,6 +162,47 @@ class ApiTests(unittest.TestCase):
                 self.assertEqual(response.headers["Retry-After"], "2")
                 self.assertIn("market is busy", response.json()["detail"])
 
+    def test_public_snapshots_share_reads_but_trade_invalidates_state_and_chart(self):
+        with patch.object(
+            self.server.market, "state", wraps=self.server.market.state
+        ) as reads:
+            before = self.client.get("/api/state?selected=frog").json()
+            self.client.get("/api/state?selected=frog")
+            self.assertEqual(reads.call_count, 1)
+            self.assertEqual(self.client.get("/api/candles/frog").json(), [])
+            h = self.token()
+            self.client.get("/api/me", headers=h)
+            q = self.client.post(
+                "/api/quote",
+                headers=h,
+                json={"coin": "frog", "side": "buy", "budget": 50000000},
+            ).json()
+            self.assertEqual(
+                self.client.post(
+                    "/api/trade",
+                    headers=h,
+                    json={"quote_id": q["id"], "request_id": "invalidate-snapshot"},
+                ).status_code,
+                200,
+            )
+            after = self.client.get("/api/state?selected=frog").json()
+            self.assertEqual(reads.call_count, 2)
+            old = next(c for c in before["coins"] if c["id"] == "frog")
+            new = next(c for c in after["coins"] if c["id"] == "frog")
+            self.assertGreater(new["price"], old["price"])
+            self.assertTrue(self.client.get("/api/candles/frog").json())
+        self.server.market.account("did:privy:bob")
+        with patch.object(
+            self.server.market, "account", wraps=self.server.market.account
+        ) as accounts:
+            alice = self.client.get("/api/me", headers=self.token()).json()
+            bob = self.client.get(
+                "/api/me", headers=self.token(sub="did:privy:bob")
+            ).json()
+            self.assertEqual(accounts.call_count, 2)
+            self.assertNotEqual(alice["id"], bob["id"])
+            self.assertNotEqual(alice["holdings"], bob["holdings"])
+
     def test_backend_starts_simulation_and_launches_without_standalone_worker(self):
         with self.server.market.transaction() as db:
             db.execute("UPDATE meta SET value='0' WHERE key='next_launch_at'")

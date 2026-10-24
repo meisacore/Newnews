@@ -15,6 +15,8 @@ with sync_playwright() as p:
         **({"executable_path": executable} if executable else {}),
     )
     page = browser.new_page(viewport={"width": 1440, "height": 1100})
+    # Page-level fixture routes do not intercept SharedWorker requests.
+    page.add_init_script("window.SharedWorker = undefined")
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     actual = page.request.get(base + "/api/state").json()
@@ -65,7 +67,7 @@ with sync_playwright() as p:
     })();""")
     page.goto(base + "/market.html#pulse", wait_until="domcontentloaded")
     page.locator(".feed-status").filter(has_text="Live simulation").wait_for()
-    page.wait_for_function("window.__marketRequests>=2", timeout=15000)
+    page.wait_for_function("window.__marketRequests>=2", timeout=20000)
     assert page.evaluate("window.__marketMax") == 1
     column = page.get_by_role("region", name="New pairs", exact=True)
     assert column.locator(".pulse-card").count() == 2
@@ -75,7 +77,7 @@ with sync_playwright() as p:
         pulse_counts={"new": 3, "stretch": 0, "migrated": 0},
         total_coins=3,
     )
-    column.locator(".column-held").filter(has_text="1 new").wait_for(timeout=10000)
+    column.locator(".column-held").filter(has_text="1 new").wait_for(timeout=15000)
     assert column.locator(".pulse-card").count() == 2
     assert "Live simulation" in page.locator(".feed-status").inner_text()
     column.get_by_role("button", name="Resume New pairs feed", exact=True).click()
@@ -110,7 +112,7 @@ with sync_playwright() as p:
         "last_tick_at": int(time.time()) - 15,
         "age_seconds": 15,
     }
-    page.locator(".feed-status").filter(has_text="Updating").wait_for(timeout=10000)
+    page.locator(".feed-status").filter(has_text="Updating").wait_for(timeout=15000)
     assert "Simulation paused" not in page.locator(".feed-status").inner_text()
     fixture["simulation"] = {
         "running": False,
@@ -119,7 +121,7 @@ with sync_playwright() as p:
         "age_seconds": 40,
     }
     page.locator(".feed-status").filter(has_text="Simulation paused").wait_for(
-        timeout=10000
+        timeout=15000
     )
     fixture["simulation"] = {
         "running": True,
@@ -128,7 +130,7 @@ with sync_playwright() as p:
         "age_seconds": 0,
     }
     page.locator(".feed-status").filter(has_text="Live simulation").wait_for(
-        timeout=10000
+        timeout=15000
     )
     assert page.locator(".pulse .whale-watch-trades,.pulse .hot-markets").count() == 0
     page.get_by_role("link", name="Discover", exact=True).click()
